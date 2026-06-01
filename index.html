@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coco Dense</title>
+    <meta
+      name="description"
+      content="Coco Dense 是一个个人密码保险箱，支持本地加密记录、编辑、搜索和加密文件导入导出。"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="auth-mode">
+    <main class="app-shell">
+      <section class="auth-screen card" id="authScreen" aria-label="解锁界面">
+        <div class="traffic-lights auth-traffic-lights">
+          <button class="traffic-dot close-dot" type="button" aria-label="关闭窗口" data-window-action="close"></button>
+          <button class="traffic-dot minimize-dot" type="button" aria-label="最小化窗口" data-window-action="minimize"></button>
+          <button class="traffic-dot zoom-dot" type="button" aria-label="最大化窗口" data-window-action="maximize"></button>
+        </div>
+
+        <div class="auth-top">
+          <div>
+            <p class="eyebrow">Coco Dense</p>
+            <h1>密码保险箱</h1>
+          </div>
+          <div class="auth-mark" aria-label="锁定状态">
+            <svg class="mark-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M8.5 10V8.2a3.5 3.5 0 0 1 7 0V10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+              <rect
+                x="5.5"
+                y="10"
+                width="13"
+                height="9.5"
+                rx="2.8"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+              />
+              <circle cx="12" cy="14.5" r="1.2" fill="currentColor" />
+            </svg>
+          </div>
+        </div>
+
+        <form class="auth-form" id="unlockForm">
+          <label for="masterPassword">主密码</label>
+          <div class="input-row">
+            <input
+              id="masterPassword"
+              type="password"
+              placeholder="请输入主密码"
+              autocomplete="current-password"
+            />
+            <button
+              class="password-toggle"
+              type="button"
+              id="togglePassword"
+              aria-label="显示主密码"
+              aria-pressed="false"
+            >
+              <svg class="toggle-icon toggle-icon-show" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linejoin="round"
+                />
+                <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7" />
+              </svg>
+              <svg class="toggle-icon toggle-icon-hide hidden" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                <path
+                  d="M10.5 10.5A3.4 3.4 0 0 0 9.5 12a2.5 2.5 0 1 0 4 2"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M2.5 12s3.4-6.5 9.5-6.5c1.3 0 2.5.2 3.6.6"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M21.5 12s-2 3.7-5.6 5.6"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="button-row">
+            <button class="primary-btn" type="submit">解锁</button>
+            <button class="secondary-btn" type="button" id="bioBtn">忘记密码</button>
+          </div>
+          <p class="helper">
+            密码只保存在本地加密保险箱中。忘记主密码时，可以通过已设置的安全问题尝试恢复。
+          </p>
+        </form>
+      </section>
+
+      <section class="vault-screen hidden" id="vaultScreen" aria-label="密码库界面">
+        <div class="app-card">
+          <header class="app-header">
+            <div class="traffic-lights">
+              <button
+                class="traffic-dot close-dot"
+                type="button"
+                aria-label="关闭窗口"
+                id="closeWindowBtn"
+                data-window-action="close"
+              ></button>
+              <button
+                class="traffic-dot minimize-dot"
+                type="button"
+                aria-label="最小化窗口"
+                id="minimizeWindowBtn"
+                data-window-action="minimize"
+              ></button>
+              <button
+                class="traffic-dot zoom-dot"
+                type="button"
+                aria-label="最大化窗口"
+                id="maximizeWindowBtn"
+                data-window-action="maximize"
+              ></button>
+            </div>
+            <div class="window-drag"></div>
+            <div class="brand-compact">
+              <div>
+                <p class="eyebrow">Coco Dense</p>
+                <h2>我的密码</h2>
+              </div>
+            </div>
+            <div class="topbar-actions">
+              <span class="build-pill" id="buildPill">v17:50</span>
+              <button class="secondary-btn" type="button" id="lockBtn">锁定</button>
+              <button class="secondary-btn" type="button" id="settingsBtn">设置</button>
+              <button class="primary-btn" type="button" id="newEntryBtn">新增</button>
+            </div>
+          </header>
+
+          <div class="app-body">
+            <aside class="sidebar">
+              <div class="sidebar-tools">
+                <div class="search-row">
+                  <span aria-hidden="true">⌕</span>
+                  <input
+                    id="searchInput"
+                    type="search"
+                    placeholder="搜索名称、账号、网址、标签"
+                    aria-label="搜索密码条目"
+                  />
+                </div>
+
+                <div class="chip-row">
+                  <button class="chip chip-active" type="button">全部</button>
+                  <button class="chip" type="button">收藏</button>
+                  <button class="chip" type="button">最近</button>
+                </div>
+              </div>
+
+              <div class="vault-list" id="vaultList" role="list">
+                <p class="empty-state hidden" id="emptyState">没有找到条目</p>
+              </div>
+            </aside>
+
+            <section class="content">
+              <div class="content-head">
+                <div>
+                  <p class="eyebrow" id="detailModeLabel">查看详情</p>
+                  <h2>账号详情</h2>
+                </div>
+                <div class="content-actions">
+                  <button class="secondary-btn" type="button" id="openUrlBtn">打开网址</button>
+                  <button class="secondary-btn" type="button" id="editEntryBtn">编辑</button>
+                  <button class="secondary-btn" type="button" id="favoriteEntryBtn">收藏</button>
+                  <button class="secondary-btn hidden" type="button" id="generatePasswordBtn">生成密码</button>
+                  <button class="text-btn danger-btn" type="button" id="deleteEntryBtn">删除</button>
+                </div>
+              </div>
+
+              <div class="detail-panel">
+                <div class="empty-detail hidden" id="emptyDetailState">
+                  <div class="empty-detail-mark">
+                    <img src="./assets/app-icon.png" alt="Coco Dense" />
+                  </div>
+                  <p class="empty-detail-title">Coco Dense</p>
+                </div>
+
+                <div class="read-view" id="readView">
+                  <div class="detail-grid">
+                    <button class="detail-tile" type="button" data-copy-field="site">
+                      <span>名称</span>
+                      <strong id="siteValue">-</strong>
+                    </button>
+                    <button class="detail-tile" type="button" data-copy-field="url">
+                      <span>网址</span>
+                      <strong id="urlValue">-</strong>
+                    </button>
+                    <button class="detail-tile" type="button" data-copy-field="account">
+                      <span>账号</span>
+                      <strong id="accountValue">-</strong>
+                    </button>
+                    <div class="detail-tile password-tile" data-copy-field="password">
+                      <div class="tile-head">
+                        <span>密码</span>
+                        <button class="eye-btn" type="button" id="toggleReadPassword" aria-label="显示密码" aria-pressed="false">
+                          <svg class="eye-icon eye-open" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+                            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7" />
+                          </svg>
+                          <svg class="eye-icon eye-close hidden" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                            <path d="M10.5 10.5A3.4 3.4 0 0 0 9.5 12a2.5 2.5 0 1 0 4 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                            <path d="M2.5 12s3.4-6.5 9.5-6.5c1.3 0 2.5.2 3.6.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                            <path d="M21.5 12s-2 3.7-5.6 5.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                          </svg>
+                        </button>
+                      </div>
+                      <strong id="passwordValue">••••••••</strong>
+                    </div>
+                  </div>
+
+                  <div class="read-section">
+                    <div class="read-section-title">标签</div>
+                    <div class="read-tags" id="readTags"></div>
+                  </div>
+
+                  <div class="read-section">
+                    <div class="read-section-title">备注</div>
+                    <p class="read-notes" id="notesValue">-</p>
+                  </div>
+                </div>
+
+                <div class="edit-view hidden" id="editView">
+                  <div class="form-grid">
+                    <label>
+                      名称
+                      <input id="siteInput" type="text" placeholder="例如 GitHub" />
+                    </label>
+                    <label>
+                      网址
+                      <input id="urlInput" type="url" placeholder="https://example.com" />
+                    </label>
+                    <label>
+                      账号
+                      <input id="accountInput" type="text" placeholder="邮箱、用户名或手机号" />
+                    </label>
+                    <label>
+                      密码
+                      <div class="input-row">
+                        <input id="entryPasswordInput" type="password" placeholder="输入或粘贴密码" />
+                        <button class="password-toggle" type="button" id="toggleEntryPassword" aria-label="显示密码" aria-pressed="false">
+                          <svg class="toggle-icon toggle-icon-show" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" />
+                            <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7" />
+                          </svg>
+                          <svg class="toggle-icon toggle-icon-hide hidden" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                            <path d="M10.5 10.5A3.4 3.4 0 0 0 9.5 12a2.5 2.5 0 1 0 4 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                            <path d="M2.5 12s3.4-6.5 9.5-6.5c1.3 0 2.5.2 3.6.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                            <path d="M21.5 12s-2 3.7-5.6 5.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div class="strength-meter" id="entryPasswordStrength" aria-live="polite">
+                        <span class="strength-bar"></span>
+                        <span class="strength-text">密码强度：未填写</span>
+                      </div>
+                    </label>
+
+                    <div class="priority-field priority-field-modern">
+                      <span>优先级</span>
+                      <div class="priority-picker" id="priorityPicker" role="group" aria-label="优先级">
+                        <button class="priority-choice" type="button" data-priority="red" aria-label="红色优先级">
+                          <span class="menu-priority red"></span>
+                          <span>红色</span>
+                        </button>
+                        <button class="priority-choice" type="button" data-priority="yellow" aria-label="黄色优先级">
+                          <span class="menu-priority yellow"></span>
+                          <span>黄色</span>
+                        </button>
+                        <button class="priority-choice" type="button" data-priority="blue" aria-label="蓝色优先级">
+                          <span class="menu-priority blue"></span>
+                          <span>蓝色</span>
+                        </button>
+                        <button class="priority-choice" type="button" data-priority="green" aria-label="绿色优先级">
+                          <span class="menu-priority green"></span>
+                          <span>绿色</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <label class="pin-field">
+                      置顶
+                      <button class="pin-toggle" type="button" id="pinnedToggle" aria-pressed="false">
+                        <span class="pin-dot"></span>
+                        <span>不置顶</span>
+                      </button>
+                    </label>
+
+                    <div class="field-block">
+                      <label for="tagsInput">标签</label>
+                      <div class="tag-field">
+                        <input id="tagsInput" type="text" placeholder="输入标签后按回车" />
+                        <div class="tag-preview" id="tagPreview"></div>
+                      </div>
+                    </div>
+
+                    <label>
+                      备注
+                      <textarea
+                        id="notesInput"
+                        rows="4"
+                        placeholder="安全问题、备用邮箱、注意事项等"
+                      ></textarea>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="settings-view hidden" id="settingsView">
+                  <div class="settings-shell">
+                    <div class="settings-head">
+                      <div>
+                        <p class="eyebrow">Preferences</p>
+                        <h2>设置</h2>
+                      </div>
+                    </div>
+
+                    <div class="settings-grid">
+                      <label class="setting-card">
+                        <span>自动锁定</span>
+                        <select id="autoLockMinutes">
+                          <option value="1">1 分钟</option>
+                          <option value="5">5 分钟</option>
+                          <option value="10">10 分钟</option>
+                          <option value="30">30 分钟</option>
+                          <option value="60">1 小时</option>
+                          <option value="0">不自动锁定</option>
+                        </select>
+                      </label>
+
+                      <label class="setting-card">
+                        <span>剪贴板清空</span>
+                        <select id="clipboardClearSeconds">
+                          <option value="10">10 秒</option>
+                          <option value="30">30 秒</option>
+                          <option value="60">1 分钟</option>
+                          <option value="180">3 分钟</option>
+                          <option value="0">不自动清空</option>
+                        </select>
+                      </label>
+
+                      <label class="setting-card">
+                        <span>生成密码长度</span>
+                        <input id="passwordLengthSetting" type="number" min="1" max="40" step="1" />
+                      </label>
+
+                      <label class="setting-card switch-card">
+                        <span>复制前二次确认</span>
+                        <input id="copyConfirmSetting" type="checkbox" />
+                      </label>
+
+                      <label class="setting-card switch-card">
+                        <span>启动时显示欢迎页</span>
+                        <input id="welcomeSetting" type="checkbox" />
+                      </label>
+
+                      <label class="setting-card switch-card">
+                        <span>导出前自动备份</span>
+                        <input id="backupExportSetting" type="checkbox" />
+                      </label>
+
+                      <div class="setting-card recovery-setting">
+                        <div class="recovery-setting-head">
+                          <div>
+                            <span>安全问题找回</span>
+                            <p id="recoveryStatusText">未设置，忘记主密码时将无法恢复。</p>
+                          </div>
+                          <span class="recovery-pill" id="recoveryStatusPill">未设置</span>
+                        </div>
+                        <div class="recovery-actions compact">
+                          <button class="secondary-btn" type="button" id="openRecoverySettingsBtn">编辑安全问题</button>
+                        </div>
+                      </div>
+
+                      <div class="setting-card action-setting">
+                        <div>
+                          <span>修改主密码</span>
+                          <p>修改后，下次解锁请使用新的主密码。</p>
+                        </div>
+                        <button class="secondary-btn" type="button" id="changePasswordBtn">改密码</button>
+                      </div>
+
+                      <div class="setting-card action-setting">
+                        <div>
+                          <span>导出加密文件</span>
+                          <p>将当前保险箱导出为加密文件，可用于备份或同步。</p>
+                        </div>
+                        <button class="secondary-btn" type="button" id="syncBtn">导出</button>
+                      </div>
+
+                      <div class="setting-card danger-setting">
+                        <div>
+                          <span>清空全部密码</span>
+                          <p>删除当前保险箱中的全部密码条目，设置项会保留。</p>
+                        </div>
+                        <button class="danger-outline-btn" type="button" id="clearAllEntriesBtn">清空</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="footer-row">
+                <div class="sync-status">
+                  <span class="status-dot"></span>
+                  <span id="syncText">等待解锁保险箱</span>
+                </div>
+                <div class="footer-actions">
+                  <button class="secondary-btn hidden" type="button" id="importVaultBtn">导入</button>
+                  <button class="secondary-btn hidden" type="button" id="cancelEditBtn">取消</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <nav class="mobile-nav card" aria-label="底部导航">
+          <button class="nav-item nav-active" type="button">首页</button>
+          <button class="nav-item" type="button">搜索</button>
+          <button class="nav-item" type="button">新增</button>
+          <button class="nav-item" type="button">设置</button>
+        </nav>
+      </section>
+    </main>
+
+    <div class="modal-backdrop hidden" id="changePasswordModal" aria-hidden="true">
+      <section class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Security</p>
+            <h2 id="changePasswordTitle">修改主密码</h2>
+          </div>
+          <button class="icon-btn" type="button" id="closePasswordModalBtn" aria-label="关闭修改主密码窗口">×</button>
+        </div>
+        <p class="modal-helper">修改后，下一次解锁请使用新的主密码。</p>
+        <form class="modal-form" id="changePasswordForm">
+          <label for="currentMasterPassword">
+            当前主密码
+            <input id="currentMasterPassword" type="password" autocomplete="current-password" />
+          </label>
+          <label for="nextMasterPassword">
+            新主密码
+            <input id="nextMasterPassword" type="password" autocomplete="new-password" />
+          </label>
+          <label for="confirmMasterPassword">
+            确认新主密码
+            <input id="confirmMasterPassword" type="password" autocomplete="new-password" />
+          </label>
+          <div class="confirm-note">
+            <span class="confirm-dot" aria-hidden="true"></span>
+            不会自动备份。点击保存后，会直接用新主密码重新加密当前保险箱。
+          </div>
+          <p class="form-error hidden" id="changePasswordError" role="alert"></p>
+          <div class="modal-actions">
+            <button class="secondary-btn" type="button" id="cancelPasswordChangeBtn">取消</button>
+            <button class="primary-btn" type="submit" id="submitPasswordChangeBtn">保存新密码</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="forgotPasswordModal" aria-hidden="true">
+      <section class="modal-sheet recovery-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Recovery</p>
+            <h2 id="forgotPasswordTitle">忘记主密码</h2>
+          </div>
+          <button class="icon-btn" type="button" id="closeForgotPasswordBtn" aria-label="关闭忘记密码窗口">×</button>
+        </div>
+        <p class="modal-helper" id="forgotPasswordHelper">
+          如果你之前设置过安全问题，可以通过答案解锁本地恢复包。
+        </p>
+        <div class="recovery-empty hidden" id="forgotPasswordUnavailable">
+          <strong>还没有设置安全问题</strong>
+          <span>Coco Dense 不会保存可直接找回的明文主密码。请记住主密码，或在解锁后到设置里配置安全问题。</span>
+        </div>
+        <form class="modal-form recovery-form" id="forgotPasswordForm">
+          <label>
+            <span id="forgotQuestion1">安全问题</span>
+            <input id="forgotAnswer1" type="password" autocomplete="off" placeholder="请输入答案" />
+          </label>
+          <p class="form-error hidden" id="forgotPasswordError" role="alert"></p>
+          <div class="modal-actions">
+            <button class="secondary-btn" type="button" id="cancelForgotPasswordBtn">取消</button>
+            <button class="primary-btn" type="submit" id="submitForgotPasswordBtn">验证并解锁</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="recoverySettingsModal" aria-hidden="true">
+      <section class="modal-sheet recovery-modal-sheet" role="dialog" aria-modal="true" aria-labelledby="recoverySettingsTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">Recovery</p>
+            <h2 id="recoverySettingsTitle">设置安全问题</h2>
+          </div>
+          <button class="icon-btn" type="button" id="closeRecoverySettingsBtn" aria-label="关闭安全问题设置">×</button>
+        </div>
+        <p class="modal-helper">只设置一个你自己记得住、别人不容易猜到的问题。答案不会明文保存。</p>
+        <form class="modal-form recovery-form" id="recoverySettingsForm">
+          <label>
+            安全问题
+            <select id="recoveryQuestion1">
+              <option value="你第一只宠物的名字是什么？">你第一只宠物的名字是什么？</option>
+              <option value="你最喜欢的一本书是什么？">你最喜欢的一本书是什么？</option>
+              <option value="你童年最熟悉的街道叫什么？">你童年最熟悉的街道叫什么？</option>
+              <option value="你第一次旅行去过哪里？">你第一次旅行去过哪里？</option>
+              <option value="你最喜欢的城市是哪一个？">你最喜欢的城市是哪一个？</option>
+              <option value="你第一份工作的公司叫什么？">你第一份工作的公司叫什么？</option>
+              <option value="你最喜欢的一道菜是什么？">你最喜欢的一道菜是什么？</option>
+            </select>
+          </label>
+          <label>
+            答案
+            <input id="recoveryAnswer1" type="password" autocomplete="off" placeholder="请输入答案" />
+          </label>
+          <p class="form-error hidden" id="recoverySettingsError" role="alert"></p>
+          <div class="modal-actions">
+            <button class="secondary-btn" type="button" id="clearRecoveryAnswersBtn">清空</button>
+            <button class="secondary-btn" type="button" id="cancelRecoverySettingsBtn">取消</button>
+            <button class="primary-btn" type="submit" id="saveRecoveryBtn">保存</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="toast hidden" id="toast" role="status" aria-live="polite">已解锁保险箱</div>
+
+    <div class="entry-context-menu hidden" id="entryContextMenu" role="menu" aria-hidden="true">
+      <button type="button" role="menuitem" data-menu-action="edit">
+        <span class="menu-label">编辑</span>
+      </button>
+      <button type="button" role="menuitem" data-menu-action="rename">
+        <span class="menu-label">改名称</span>
+      </button>
+      <div class="menu-separator" aria-hidden="true"></div>
+      <button type="button" role="menuitem" data-menu-action="toggle-pin">
+        <span class="menu-dot pin"></span>
+        <span class="menu-label">置顶</span>
+      </button>
+      <button type="button" role="menuitem" data-menu-action="toggle-favorite">
+        <span class="menu-dot favorite"></span>
+        <span class="menu-label">收藏</span>
+      </button>
+      <div class="menu-separator" aria-hidden="true"></div>
+      <div class="menu-title">优先级</div>
+      <div class="menu-priority-row" role="group" aria-label="优先级">
+        <button type="button" data-menu-action="priority" data-priority="red" aria-label="红色优先级">
+          <span class="menu-priority red"></span>
+        </button>
+        <button type="button" data-menu-action="priority" data-priority="yellow" aria-label="黄色优先级">
+          <span class="menu-priority yellow"></span>
+        </button>
+        <button type="button" data-menu-action="priority" data-priority="blue" aria-label="蓝色优先级">
+          <span class="menu-priority blue"></span>
+        </button>
+        <button type="button" data-menu-action="priority" data-priority="green" aria-label="绿色优先级">
+          <span class="menu-priority green"></span>
+        </button>
+      </div>
+    </div>
+
+    <script src="./script.js"></script>
+  </body>
+</html>

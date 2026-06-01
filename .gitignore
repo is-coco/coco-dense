@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.npm-cache/
+.electron-cache/
+.electron-builder-cache/
+
+*.log
+*.tmp
+*.bak
+Thumbs.db
+.DS_Store

@@ -1,0 +1,45 @@
+{
+  "name": "coco-dense",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable",
+    "dist:local": "powershell -ExecutionPolicy Bypass -File build-local.ps1",
+    "dist:unpacked": "powershell -ExecutionPolicy Bypass -File build-unpacked.ps1"
+  },
+  "devDependencies": {
+    "electron": "^34.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "pinyin-pro": "^3.28.1"
+  },
+  "build": {
+    "appId": "com.coco.cocodense",
+    "productName": "Coco Dense",
+    "compression": "store",
+    "files": [
+      "index.html",
+      "styles.css",
+      "script.js",
+      "main.js",
+      "preload.js",
+      "assets/**/*",
+      "README.md"
+    ],
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    },
+    "win": {
+      "icon": "assets/app-icon.ico",
+      "target": [
+        "portable"
+      ]
+    },
+    "directories": {
+      "output": "dist"
+    }
+  }
+}
