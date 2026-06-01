@@ -17,6 +17,7 @@ const PBKDF2_ROUNDS = 250000;
 const FAILED_ATTEMPTS_LIMIT = 5;
 const FAILED_ATTEMPT_LOCK_MS = 30000;
 const BACKUP_LIMIT = 10;
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:"]);
 
 function getAppIconPath() {
   return path.join(__dirname, "assets", "app-icon.png");
@@ -103,10 +104,11 @@ function defaultVault() {
 }
 
 function loadVaultFile() {
-  const filePath = path.join(app.getPath("userData"), "vault.json");
+  const filePath = getVaultFilePath();
   if (!fs.existsSync(filePath)) {
     return { exists: false, corrupted: false, data: null };
   }
+
   try {
     const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (!raw || typeof raw !== "object") {
@@ -119,7 +121,7 @@ function loadVaultFile() {
 }
 
 function saveVaultFile(content) {
-  const filePath = path.join(app.getPath("userData"), "vault.json");
+  const filePath = getVaultFilePath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(content, null, 2), "utf8");
 }
@@ -145,6 +147,7 @@ function loadRecoveryFile() {
   if (!fs.existsSync(filePath)) {
     return { exists: false, corrupted: false, data: null };
   }
+
   try {
     const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
     const questions = Array.isArray(raw?.questions) ? raw.questions : [];
@@ -194,6 +197,7 @@ function trimBackups() {
       return { fullPath, mtimeMs: stat.mtimeMs };
     })
     .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
   files.slice(BACKUP_LIMIT).forEach((file) => {
     try {
       fs.unlinkSync(file.fullPath);
@@ -219,6 +223,18 @@ function createVaultBackup(reason = "manual") {
   return { ok: true, filePath: backupPath };
 }
 
+function validateExternalUrl(targetUrl) {
+  try {
+    const parsed = new URL(String(targetUrl ?? "").trim());
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+      return { ok: false, error: "只允许打开 http 或 https 链接" };
+    }
+    return { ok: true, href: parsed.href };
+  } catch {
+    return { ok: false, error: "网址格式无效" };
+  }
+}
+
 function resetUnlockFailures() {
   unlockFailures = 0;
   unlockLockedUntil = 0;
@@ -239,6 +255,7 @@ function broadcastStatus() {
     corrupted: vaultState.corrupted,
     lockedUntil: unlockLockedUntil,
   };
+
   if (loginWindow && !loginWindow.isDestroyed()) {
     loginWindow.webContents.send("app:status", status);
   }
@@ -268,7 +285,7 @@ function createBaseWindow(options) {
   });
 }
 
-function wireWindowControls(win) {
+function wireWindowControls() {
   ipcMain.handle("window:minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
@@ -301,6 +318,7 @@ function wireWindowControls(win) {
       vaultWindow.showInactive();
       vaultWindow.focus();
     }
+
     if (loginWindow && !loginWindow.isDestroyed()) {
       loginWindow.webContents.send("app:clearAuth");
       loginWindow.hide();
@@ -310,6 +328,7 @@ function wireWindowControls(win) {
   ipcMain.handle("window:lockVault", () => {
     vaultCache = null;
     activeMasterPassword = "";
+
     if (loginWindow && !loginWindow.isDestroyed()) {
       loginWindow.webContents.send("app:clearAuth");
     }
@@ -323,6 +342,7 @@ function wireWindowControls(win) {
     if (vaultWindow && !vaultWindow.isDestroyed()) {
       vaultWindow.hide();
     }
+
     broadcastStatus();
   });
 
@@ -336,13 +356,12 @@ function wireWindowControls(win) {
   });
 
   ipcMain.handle("vault:getRecoveryStatus", () => recoveryStatus());
-
   ipcMain.handle("vault:getCurrent", () => vaultCache ?? loadVaultFile().data);
 
   ipcMain.handle("vault:unlock", (_event, masterPassword) => {
     const vaultState = loadVaultFile();
     if (vaultState.corrupted) {
-      return { ok: false, error: "保险箱文件损坏，请先导入备份或修复文件" };
+      return { ok: false, error: "保险箱文件已损坏，请先导入备份或修复文件" };
     }
     if (unlockLockedUntil && Date.now() < unlockLockedUntil) {
       const remaining = Math.max(1, Math.ceil((unlockLockedUntil - Date.now()) / 1000));
@@ -396,7 +415,7 @@ function wireWindowControls(win) {
   ipcMain.handle("vault:changePassword", (_event, currentPassword, nextPassword) => {
     const vaultState = loadVaultFile();
     if (vaultState.corrupted) {
-      return { ok: false, error: "保险箱文件损坏，请先导入备份或修复文件" };
+      return { ok: false, error: "保险箱文件已损坏，请先导入备份或修复文件" };
     }
     if (!vaultState.exists) {
       return { ok: false, error: "本地还没有可修改的保险箱" };
@@ -442,6 +461,7 @@ function wireWindowControls(win) {
     if (!vaultState.exists || vaultState.corrupted) {
       return { ok: false, error: "当前保险箱不可用，无法设置找回" };
     }
+
     try {
       decryptJson(masterPassword, vaultState.data);
       const now = new Date().toISOString();
@@ -464,8 +484,9 @@ function wireWindowControls(win) {
       return { ok: false, unavailable: true, error: "还没有设置安全问题" };
     }
     if (recovery.corrupted) {
-      return { ok: false, error: "安全问题恢复文件损坏" };
+      return { ok: false, error: "安全问题恢复文件已损坏" };
     }
+
     const answerList = Array.isArray(answers) ? answers.map((item) => String(item ?? "")) : [];
     if (answerList.length !== 1 || answerList.some((item) => !normalizeRecoveryAnswer(item))) {
       return { ok: false, error: "请填写答案" };
@@ -477,6 +498,7 @@ function wireWindowControls(win) {
       if (!vaultState.exists || vaultState.corrupted) {
         return { ok: false, error: "当前保险箱不可用，无法解锁" };
       }
+
       const payload = decryptJson(recoveredPassword, vaultState.data);
       vaultCache = payload;
       activeMasterPassword = recoveredPassword;
@@ -494,15 +516,17 @@ function wireWindowControls(win) {
   });
 
   ipcMain.handle("vault:export", (_event, masterPassword, payload) => {
-    const wrapped = encryptJson(masterPassword, payload);
-    return wrapped;
+    return encryptJson(masterPassword, payload);
   });
 
   ipcMain.handle("vault:import", (_event, masterPassword, wrapped) => {
     try {
       const payload = decryptJson(masterPassword, wrapped);
       saveVaultFile(wrapped);
+      deleteRecoveryFile();
       vaultCache = payload;
+      activeMasterPassword = String(masterPassword ?? "");
+      resetUnlockFailures();
       broadcastStatus();
       return { ok: true, vault: payload };
     } catch {
@@ -521,6 +545,7 @@ function wireWindowControls(win) {
     if (result.canceled || !result.filePath) {
       return { ok: false, canceled: true };
     }
+
     const wrapped = encryptJson(masterPassword, payload);
     fs.writeFileSync(result.filePath, JSON.stringify(wrapped, null, 2), "utf8");
     return { ok: true, filePath: result.filePath };
@@ -535,21 +560,28 @@ function wireWindowControls(win) {
     if (result.canceled || !result.filePaths.length) {
       return { ok: false, canceled: true };
     }
+
     const filePath = result.filePaths[0];
     try {
       const wrapped = JSON.parse(fs.readFileSync(filePath, "utf8"));
       const payload = decryptJson(masterPassword, wrapped);
-      const backupResult = createVaultBackup("before-import");
-      if (!backupResult.ok) {
-        return { ok: false, error: "自动备份失败，已取消导入" };
+
+      let backupPath = "";
+      if (fs.existsSync(getVaultFilePath())) {
+        const backupResult = createVaultBackup("before-import");
+        if (!backupResult.ok) {
+          return { ok: false, error: "自动备份失败，已取消导入" };
+        }
+        backupPath = backupResult.filePath;
       }
+
       saveVaultFile(wrapped);
       deleteRecoveryFile();
       vaultCache = payload;
       activeMasterPassword = String(masterPassword ?? "");
       resetUnlockFailures();
       broadcastStatus();
-      return { ok: true, vault: payload, filePath, backupPath: backupResult.filePath };
+      return { ok: true, vault: payload, filePath, backupPath };
     } catch {
       return { ok: false, error: "导入失败，文件格式或密码不正确" };
     }
@@ -557,8 +589,12 @@ function wireWindowControls(win) {
 
   ipcMain.handle("shell:openExternal", (_event, targetUrl) => {
     if (!targetUrl) return { ok: false, error: "地址为空" };
+
+    const validated = validateExternalUrl(targetUrl);
+    if (!validated.ok) return validated;
+
     try {
-      shell.openExternal(String(targetUrl));
+      shell.openExternal(validated.href);
       return { ok: true };
     } catch {
       return { ok: false, error: "无法打开网址" };
@@ -621,6 +657,7 @@ app.whenReady().then(() => {
   if (process.platform === "win32") {
     app.setAppUserModelId("com.coco.cocodense");
   }
+
   wireWindowControls();
   createVaultWindow();
   createLoginWindow();

@@ -110,6 +110,7 @@ const state = {
   activeId: "",
   unlocked: false,
   editing: false,
+  detailMode: "welcome",
   editTags: [],
   pendingActions: {},
   readPasswordVisible: false,
@@ -251,17 +252,11 @@ function clearSensitiveInputs() {
 }
 
 function setActiveEntry(id) {
-  if (isSettingsOpen()) {
-    settingsView?.classList.add("hidden");
-    syncSettingsModeClass();
-  }
   state.activeId = id;
-  state.editing = false;
   state.readPasswordVisible = false;
   renderEntries();
   fillForm(getActiveEntry());
-  syncEditorMode();
-  syncEmptyDetailState();
+  setDetailMode("read");
 }
 
 function getActiveEntry() {
@@ -302,7 +297,7 @@ async function handlePrimaryAction() {
     return;
   }
 
-  if (settingsView && !settingsView.classList.contains("hidden")) {
+  if (isSettingsOpen()) {
     closeSettingsView();
     return;
   }
@@ -414,21 +409,82 @@ function syncPrimaryActionButton() {
   newEntryBtn.textContent = isSettingsOpen() ? "返回" : state.editing ? "保存" : "新增";
 }
 
+function syncAuthSecondaryAction() {
+  if (!bioBtn) return;
+  bioBtn.textContent = state.vaultCorrupted || !state.hasVaultFile ? "导入备份" : "忘记密码";
+}
+
+function hasActiveSelection() {
+  return Boolean(state.activeId && state.entries.some((entry) => entry.id === state.activeId));
+}
+
+function resolveDetailMode(mode) {
+  if (mode === "settings") return "settings";
+  if (mode === "edit") return "edit";
+  if (mode === "read" && hasActiveSelection()) return "read";
+  return hasActiveSelection() ? "read" : "welcome";
+}
+
+function syncDetailSurface() {
+  const mode = resolveDetailMode(state.detailMode);
+  const showWelcome = mode === "welcome";
+  const showRead = mode === "read";
+  const showEdit = mode === "edit";
+  const showSettings = mode === "settings";
+  const hasSelection = hasActiveSelection();
+
+  state.detailMode = mode;
+  state.editing = showEdit;
+
+  settingsView?.classList.toggle("hidden", !showSettings);
+  content?.classList.toggle("settings-mode", showSettings);
+  content?.classList.toggle("empty-detail-mode", showWelcome);
+  emptyDetailState?.classList.toggle("hidden", !showWelcome);
+  readView?.classList.toggle("hidden", !showRead);
+  editView?.classList.toggle("hidden", !showEdit);
+  cancelEditBtn?.classList.toggle("hidden", !showEdit);
+  importVaultBtn?.classList.toggle("hidden", showEdit);
+  generatePasswordBtn?.classList.toggle("hidden", !showEdit);
+  openUrlBtn?.classList.toggle("hidden", !showRead);
+  favoriteEntryBtn?.classList.toggle("hidden", !hasSelection || showSettings || showWelcome);
+  deleteEntryBtn?.classList.toggle("hidden", !hasSelection || showSettings || showWelcome);
+
+  if (detailModeLabel) {
+    detailModeLabel.textContent = showSettings
+      ? "设置"
+      : showEdit
+        ? "编辑条目"
+        : showRead
+          ? "查看详情"
+          : "欢迎";
+  }
+
+  if (editEntryBtn) {
+    editEntryBtn.textContent = showSettings ? "返回" : showEdit ? "查看" : "编辑";
+  }
+
+  syncPrimaryActionButton();
+  if (showEdit) {
+    siteInput.focus({ preventScroll: true });
+  }
+}
+
+function setDetailMode(mode) {
+  state.detailMode = resolveDetailMode(mode);
+  syncDetailSurface();
+}
+
 function isSettingsOpen() {
-  return Boolean(settingsView && !settingsView.classList.contains("hidden"));
+  return state.detailMode === "settings";
 }
 
 function syncSettingsModeClass() {
-  content?.classList.toggle("settings-mode", isSettingsOpen());
+  syncDetailSurface();
 }
 
 function resetDetailSurface() {
-  settingsView?.classList.add("hidden");
-  content?.classList.remove("settings-mode");
-  state.editing = false;
   state.readPasswordVisible = false;
-  cancelEditBtn?.classList.add("hidden");
-  generatePasswordBtn?.classList.add("hidden");
+  setDetailMode("welcome");
 }
 
 function syncSettingsForm() {
@@ -457,18 +513,7 @@ function syncRecoverySettings() {
 }
 
 function syncDetailMode() {
-  const editing = state.editing;
-  readView.classList.toggle("hidden", editing);
-  editView.classList.toggle("hidden", !editing);
-  settingsView?.classList.add("hidden");
-  cancelEditBtn.classList.toggle("hidden", !editing);
-  generatePasswordBtn.classList.toggle("hidden", !editing);
-  openUrlBtn?.classList.toggle("hidden", editing);
-  editEntryBtn.textContent = editing ? "查看" : "编辑";
-  detailModeLabel.textContent = editing ? "编辑条目" : "查看详情";
-  if (editing) {
-    siteInput.focus({ preventScroll: true });
-  }
+  syncDetailSurface();
 }
 
 function confirmAction(message) {
@@ -558,104 +603,6 @@ function showRecoverySettingsError(message) {
   recoverySettingsError.textContent = message;
   recoverySettingsError.classList.remove("hidden");
 }
-
-syncRecoverySettings = function patchedSyncRecoverySettings() {
-  const status = state.recoveryStatus || {};
-  const configured = Boolean(status.configured);
-  if (recoveryStatusText) {
-    recoveryStatusText.textContent = configured
-      ? "已设置，忘记主密码时可以找回。"
-      : "未设置，忘记主密码时无法找回。";
-  }
-  if (recoveryStatusPill) {
-    recoveryStatusPill.textContent = configured ? "已设置" : "未设置";
-    recoveryStatusPill.classList.toggle("is-live", configured);
-  }
-  const question = status.questions?.[0];
-  if (question && recoveryQuestion1) recoveryQuestion1.value = question;
-};
-
-openForgotPasswordModal = function patchedOpenForgotPasswordModal() {
-  if (state.vaultCorrupted) {
-    showToast("本地保险箱损坏，无法找回");
-    return;
-  }
-  forgotPasswordError.textContent = "";
-  forgotPasswordError.classList.add("hidden");
-  forgotPasswordUnavailable.classList.toggle("hidden", state.recoveryStatus.configured);
-  forgotPasswordForm.classList.toggle("hidden", !state.recoveryStatus.configured);
-  if (state.recoveryStatus.configured) {
-    forgotQuestion1.textContent = state.recoveryStatus.questions?.[0] || "安全问题";
-  }
-  forgotPasswordModal.classList.remove("hidden");
-  forgotPasswordModal.setAttribute("aria-hidden", "false");
-  (state.recoveryStatus.configured ? forgotAnswer1 : closeForgotPasswordBtn).focus({ preventScroll: true });
-};
-
-saveRecoverySettings = async function patchedSaveRecoverySettings(event) {
-  event?.preventDefault();
-  if (!state.unlocked || !state.masterPassword) {
-    showToast("请先解锁保险箱");
-    return;
-  }
-  const questions = [recoveryQuestion1.value];
-  const answers = [recoveryAnswer1.value];
-  if (!answers[0].trim()) {
-    showRecoverySettingsError("请填写答案");
-    return;
-  }
-
-  saveRecoveryBtn.disabled = true;
-  saveRecoveryBtn.textContent = "正在保存";
-  const result = await window.vault?.setupRecovery?.(state.masterPassword, questions, answers);
-  saveRecoveryBtn.disabled = false;
-  saveRecoveryBtn.textContent = "保存";
-  if (!result?.ok) {
-    showRecoverySettingsError(result?.error || "安全问题保存失败");
-    return;
-  }
-
-  recoveryAnswer1.value = "";
-  state.recoveryStatus = {
-    configured: Boolean(result.status?.configured),
-    corrupted: Boolean(result.status?.corrupted),
-    questions: Array.isArray(result.status?.questions) ? result.status.questions : [],
-    updatedAt: result.status?.updatedAt || "",
-  };
-  syncRecoverySettings();
-  closeRecoverySettingsModal();
-  showToast("安全问题已保存");
-  touchActivity();
-};
-
-recoverAndUnlock = async function patchedRecoverAndUnlock(event) {
-  event?.preventDefault();
-  const answers = [forgotAnswer1.value];
-  if (!answers[0].trim()) {
-    showForgotPasswordError("请填写答案");
-    return;
-  }
-
-  submitForgotPasswordBtn.disabled = true;
-  submitForgotPasswordBtn.textContent = "正在验证";
-  const result = await window.vault?.recoverWithAnswers?.(answers);
-  submitForgotPasswordBtn.disabled = false;
-  submitForgotPasswordBtn.textContent = "验证并解锁";
-  if (!result?.ok) {
-    showForgotPasswordError(result?.error || "验证失败");
-    return;
-  }
-
-  state.unlocked = true;
-  state.masterPassword = result.masterPassword;
-  closeForgotPasswordModal();
-  masterPassword.value = "";
-  window.vault?.showVault?.();
-  state.editing = false;
-  loadVaultPayload(result.vault);
-  showToast("已通过安全问题解锁");
-  touchActivity();
-};
 
 function normalizeUrl(value) {
   const raw = String(value ?? "").trim();
@@ -871,7 +818,6 @@ async function recoverAndUnlock(event) {
   closeForgotPasswordModal();
   masterPassword.value = "";
   window.vault?.showVault?.();
-  state.editing = false;
   loadVaultPayload(result.vault);
   showToast("已通过安全问题解锁");
   touchActivity();
@@ -985,18 +931,10 @@ function loadVaultPayload(payload) {
   syncSettingsForm();
   renderEntries();
   clearForm();
-  state.editing = false;
   refreshStatusText();
-  syncDetailMode();
-  syncEmptyDetailState();
+  refreshRecoveryStatus();
   touchActivity();
 }
-
-const originalLoadVaultPayload = loadVaultPayload;
-loadVaultPayload = function patchedLoadVaultPayload(payload) {
-  originalLoadVaultPayload(payload);
-  refreshRecoveryStatus();
-};
 
 async function initAuthState() {
   const status = await window.vault?.getStatus?.();
@@ -1012,6 +950,7 @@ async function initAuthState() {
       ? "输入主密码解锁；忘记密码时可使用已设置的安全问题。"
       : "首次输入主密码会创建新的加密保险箱。";
   }
+  syncAuthSecondaryAction();
   refreshStatusText();
 }
 
@@ -1038,22 +977,41 @@ function renderEntries() {
     button.className = `vault-item${entry.id === state.activeId ? " active" : ""}`;
     button.setAttribute("role", "listitem");
     button.dataset.entry = entry.id;
-    const safeSite = String(entry.site || "").replace(/"/g, "&quot;");
-    const nameHtml = isRenaming
-      ? `<input class="rename-input" data-rename-input="${entry.id}" value="${safeSite}" aria-label="修改名称" />`
-      : `<strong>${entry.site}</strong>`;
     const badgeClass = entry.pinned ? " pin" : entry.favorite ? " warn" : ` priority-${priority}`;
     const badgeText = entry.pinned ? "置顶" : entry.favorite ? "收藏" : PRIORITY_LABELS[priority];
-    button.innerHTML = `
-      <div class="vault-item-row">
-        <span class="priority-dot ${priority}"></span>
-        <div class="item-main">
-          ${nameHtml}
-          <span>${entry.account}</span>
-        </div>
-      </div>
-      <span class="badge${badgeClass}">${badgeText}</span>
-    `;
+    const row = document.createElement("div");
+    row.className = "vault-item-row";
+
+    const dot = document.createElement("span");
+    dot.className = `priority-dot ${priority}`;
+
+    const itemMain = document.createElement("div");
+    itemMain.className = "item-main";
+
+    if (isRenaming) {
+      const renameInput = document.createElement("input");
+      renameInput.className = "rename-input";
+      renameInput.dataset.renameInput = entry.id;
+      renameInput.value = entry.site || "";
+      renameInput.setAttribute("aria-label", "修改名称");
+      itemMain.appendChild(renameInput);
+    } else {
+      const strong = document.createElement("strong");
+      strong.textContent = entry.site || "";
+      itemMain.appendChild(strong);
+    }
+
+    const account = document.createElement("span");
+    account.textContent = entry.account || "";
+    itemMain.appendChild(account);
+
+    row.append(dot, itemMain);
+
+    const badge = document.createElement("span");
+    badge.className = `badge${badgeClass}`;
+    badge.textContent = badgeText;
+
+    button.append(row, badge);
     button.addEventListener("click", () => {
       if (state.renamingEntryId) return;
       setActiveEntry(entry.id);
@@ -1102,7 +1060,6 @@ function fillForm(entry) {
 function clearForm() {
   state.activeId = "";
   state.readPasswordVisible = false;
-  state.editing = false;
   state.activePriority = "green";
   siteInput.value = "";
   accountInput.value = "";
@@ -1116,11 +1073,9 @@ function clearForm() {
   renderTagPreview();
   renderReadView(null);
   document.querySelectorAll(".vault-item").forEach((node) => node.classList.remove("active"));
-  editEntryBtn.textContent = "查看";
   syncPriorityPicker();
   syncPinnedToggle();
-  syncPrimaryActionButton();
-  syncEmptyDetailState();
+  setDetailMode("welcome");
 }
 
 function parseTags(value) {
@@ -1202,7 +1157,9 @@ function renderReadView(entry) {
     const token = document.createElement("button");
     token.type = "button";
     token.className = "tag-token read-tag";
-    token.innerHTML = `<span>${tag}</span>`;
+    const label = document.createElement("span");
+    label.textContent = tag;
+    token.appendChild(label);
     token.addEventListener("click", () => {
       confirmWithin(`copy-tag-${tag}`, "再次点击复制标签", () => copyToClipboard(tag, "已复制"));
     });
@@ -1236,63 +1193,29 @@ function syncReadPasswordToggle() {
 }
 
 function syncEditorMode() {
-  syncDetailMode();
-  const editing = state.editing;
-  const settingsOpen = settingsView && !settingsView.classList.contains("hidden");
-  cancelEditBtn.classList.toggle("hidden", !editing);
-  generatePasswordBtn.classList.toggle("hidden", !editing);
-  openUrlBtn?.classList.toggle("hidden", editing || settingsOpen);
-  editEntryBtn.textContent = settingsOpen ? "返回" : editing ? "查看" : "编辑";
-  detailModeLabel.textContent = settingsOpen ? "设置" : editing ? "编辑条目" : "查看详情";
-  syncPrimaryActionButton();
-  if (editing) siteInput.focus({ preventScroll: true });
-  syncEmptyDetailState();
+  syncDetailSurface();
 }
 
 function syncEmptyDetailState() {
-  if (!emptyDetailState) return;
-  const hasSelection = Boolean(state.activeId && state.entries.some((entry) => entry.id === state.activeId));
-  const settingsOpen = settingsView && !settingsView.classList.contains("hidden");
-  const showEmpty = !settingsOpen && !hasSelection && !state.editing;
-  content?.classList.toggle("empty-detail-mode", showEmpty);
-  emptyDetailState.classList.toggle("hidden", !showEmpty);
-  readView.classList.toggle("hidden", showEmpty || state.editing || settingsOpen);
-  editView.classList.toggle("hidden", !state.editing || settingsOpen);
-  openUrlBtn?.classList.toggle("hidden", showEmpty || state.editing || settingsOpen);
-  favoriteEntryBtn?.classList.toggle("hidden", showEmpty || settingsOpen);
-  deleteEntryBtn?.classList.toggle("hidden", showEmpty || settingsOpen);
+  syncDetailSurface();
 }
 
 function setEditing(nextEditing) {
-  state.editing = nextEditing;
-  syncEditorMode();
+  if (nextEditing) {
+    setDetailMode("edit");
+    return;
+  }
+  setDetailMode(hasActiveSelection() ? "read" : "welcome");
 }
 
 function openSettingsView() {
-  state.editing = false;
   renderEntries();
-  settingsView?.classList.remove("hidden");
-  syncSettingsModeClass();
-  emptyDetailState?.classList.add("hidden");
-  readView.classList.add("hidden");
-  editView.classList.add("hidden");
-  cancelEditBtn.classList.add("hidden");
-  generatePasswordBtn.classList.add("hidden");
-  openUrlBtn?.classList.add("hidden");
-  favoriteEntryBtn?.classList.add("hidden");
-  deleteEntryBtn?.classList.add("hidden");
-  content?.classList.remove("empty-detail-mode");
-  detailModeLabel.textContent = "设置";
-  editEntryBtn.textContent = "返回";
-  syncPrimaryActionButton();
+  setDetailMode("settings");
   syncSettingsForm();
 }
 
 function closeSettingsView() {
-  settingsView?.classList.add("hidden");
-  syncSettingsModeClass();
-  syncEditorMode();
-  syncEmptyDetailState();
+  setDetailMode(hasActiveSelection() ? "read" : "welcome");
   if (state.activeId) {
     renderEntries();
     fillForm(getActiveEntry());
@@ -1356,8 +1279,7 @@ async function upsertEntry() {
 
   renderEntries();
   setActiveEntry(nextEntry.id);
-  state.editing = false;
-  syncEditorMode();
+  setDetailMode("read");
   await refreshVaultAfterMutation("条目已保存");
 }
 
@@ -1384,7 +1306,6 @@ unlockForm.addEventListener("submit", async (event) => {
   state.unlocked = true;
   state.masterPassword = password;
   window.vault?.showVault?.();
-  state.editing = false;
   loadVaultPayload(result.vault);
   showToast(result.needsSetup ? "已创建保险箱" : "已解锁保险箱");
   touchActivity();
@@ -1408,7 +1329,13 @@ toggleEntryPassword.addEventListener("click", () => {
   toggleEntryPassword.querySelector(".toggle-icon-hide")?.classList.toggle("hidden", !isPassword);
 });
 
-bioBtn.addEventListener("click", openForgotPasswordModal);
+bioBtn.addEventListener("click", () => {
+  if (state.vaultCorrupted || !state.hasVaultFile) {
+    importVaultFromFile();
+    return;
+  }
+  openForgotPasswordModal();
+});
 
 newEntryBtn.addEventListener("click", (event) => {
   event.preventDefault();
@@ -1421,18 +1348,17 @@ sidebar?.addEventListener("click", (event) => {
   if (isSettingsOpen()) {
     closeSettingsView();
     clearForm();
-    syncEmptyDetailState();
     touchActivity();
     return;
   }
-  if (!state.activeId && !state.editing) return;
+  if (!state.activeId && state.detailMode === "welcome") return;
   clearForm();
   setEditing(false);
   touchActivity();
 });
 
 editEntryBtn.addEventListener("click", () => {
-  if (settingsView && !settingsView.classList.contains("hidden")) {
+  if (isSettingsOpen()) {
     closeSettingsView();
     return;
   }
@@ -1534,7 +1460,7 @@ importVaultBtn?.addEventListener("click", () => {
   if (password) {
     masterPassword.value = password;
   }
-  openForgotPasswordModal();
+  importVaultFromFile();
 });
 
 syncBtn?.addEventListener("click", async () => {
@@ -1542,16 +1468,18 @@ syncBtn?.addEventListener("click", async () => {
     showToast("请先解锁保险箱");
     return;
   }
+  let createdBackup = false;
   if (state.settings.backupBeforeExport) {
     const backup = await window.vault?.createBackup?.("before-export");
     if (!backup?.ok) {
       showToast(backup?.error || "自动备份失败");
       return;
     }
+    createdBackup = true;
   }
   const result = await window.vault?.exportVaultFile?.(state.masterPassword, getVaultPayload());
   if (result?.ok) {
-    showToast("已备份并导出加密文件");
+    showToast(createdBackup ? "已备份并导出加密文件" : "已导出加密文件");
     touchActivity();
   } else if (!result?.canceled) {
     showToast("导出失败");
@@ -1566,7 +1494,6 @@ clearAllEntriesBtn?.addEventListener("click", () => {
   confirmWithin("clear-all-entries", "再次点击清空全部密码", async () => {
     state.entries = [];
     state.activeId = "";
-    state.editing = false;
     state.editTags = [];
     state.readPasswordVisible = false;
     state.renamingEntryId = "";
@@ -1574,7 +1501,6 @@ clearAllEntriesBtn?.addEventListener("click", () => {
     hideEntryContextMenu();
     clearForm();
     renderEntries();
-    syncEmptyDetailState();
     if (await persistVault()) {
       showToast("已清空全部密码");
     }
@@ -1806,10 +1732,9 @@ function showMainVault(payload) {
   }
   if (state.settings.welcomeOnStart) {
     clearForm();
-    syncEmptyDetailState();
   }
   syncPrimaryActionButton();
-  syncEmptyDetailState();
+  syncDetailSurface();
 }
 
 window.vault?.onShowVault?.(showMainVault);
@@ -1833,14 +1758,15 @@ window.vault?.onStatus?.((status) => {
       ? "输入主密码解锁；忘记密码时可使用已设置的安全问题。"
       : "首次输入主密码会创建新的加密保险箱。";
   }
+  syncAuthSecondaryAction();
   refreshStatusText();
   refreshRecoveryStatus();
-  syncEmptyDetailState();
+  syncDetailSurface();
 });
 
 queueMicrotask(() => {
   initAuthState();
-  syncEmptyDetailState();
+  syncDetailSurface();
 });
 
 

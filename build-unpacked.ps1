@@ -14,7 +14,17 @@ if (-not (Test-Path (Join-Path $electronDist "electron.exe"))) {
   throw "Electron runtime is missing. Run npm install first."
 }
 
-Get-Process | Where-Object { $_.ProcessName -eq "Coco Dense" -or $_.ProcessName -eq "electron" } | Stop-Process -Force -ErrorAction SilentlyContinue
+$targetExe = Join-Path $stableDir "Coco Dense.exe"
+Get-Process -Name "Coco Dense" -ErrorAction SilentlyContinue |
+  Where-Object {
+    try {
+      $_.Path -and ([System.IO.Path]::GetFullPath($_.Path) -eq [System.IO.Path]::GetFullPath($targetExe))
+    }
+    catch {
+      $false
+    }
+  } |
+  Stop-Process -Force -ErrorAction SilentlyContinue
 
 if (Test-Path $tmpDir) {
   Remove-Item -Recurse -Force $tmpDir
