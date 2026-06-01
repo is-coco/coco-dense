@@ -251,6 +251,10 @@ function clearSensitiveInputs() {
 }
 
 function setActiveEntry(id) {
+  if (isSettingsOpen()) {
+    settingsView?.classList.add("hidden");
+    syncSettingsModeClass();
+  }
   state.activeId = id;
   state.editing = false;
   state.readPasswordVisible = false;
@@ -1414,6 +1418,13 @@ newEntryBtn.addEventListener("click", (event) => {
 
 sidebar?.addEventListener("click", (event) => {
   if (event.target.closest("button, input, textarea, select, label, .vault-item")) return;
+  if (isSettingsOpen()) {
+    closeSettingsView();
+    clearForm();
+    syncEmptyDetailState();
+    touchActivity();
+    return;
+  }
   if (!state.activeId && !state.editing) return;
   clearForm();
   setEditing(false);
