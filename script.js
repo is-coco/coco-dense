@@ -3110,10 +3110,11 @@ window.addEventListener("click", (event) => {
 });
 
 function showMainVault(payload) {
-  if (payload?.masterPassword) {
-    state.masterPassword = payload.masterPassword;
-    state.unlocked = true;
+  if (!payload?.masterPassword) {
+    return;
   }
+  state.masterPassword = payload.masterPassword;
+  state.unlocked = true;
   resetDetailSurface();
   if (document.body.classList.contains("auth-mode")) {
     document.body.classList.remove("auth-mode");

@@ -28,6 +28,11 @@ const VAULT_FORMAT_V3 = "coco-dense-envelope-v3";
 const REMOTE_WRITE_VERIFY_ATTEMPTS = 6;
 const REMOTE_WRITE_VERIFY_DELAY_MS = 700;
 const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/is-coco/coco-dense/releases/latest";
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
 
 function getAppIconPath() {
   return path.join(__dirname, "assets", "app-icon.png");
@@ -1329,9 +1334,23 @@ function revealWindow(targetWindow) {
   return true;
 }
 
+function isVaultUnlocked() {
+  return Boolean(vaultCache && activeMasterPassword);
+}
+
 function revealPrimaryWindow() {
-  if (revealWindow(vaultWindow)) {
-    return true;
+  if (isVaultUnlocked()) {
+    if (revealWindow(vaultWindow)) {
+      return true;
+    }
+    if (revealWindow(loginWindow)) {
+      return true;
+    }
+    return false;
+  }
+
+  if (vaultWindow && !vaultWindow.isDestroyed()) {
+    vaultWindow.hide();
   }
   if (revealWindow(loginWindow)) {
     return true;
@@ -1435,9 +1454,21 @@ function wireWindowControls() {
   });
 
   ipcMain.handle("window:showVault", () => {
+    if (!isVaultUnlocked()) {
+      if (vaultWindow && !vaultWindow.isDestroyed()) {
+        vaultWindow.webContents.send("app:clearAuth");
+        vaultWindow.hide();
+      }
+      if (loginWindow && !loginWindow.isDestroyed()) {
+        revealWindow(loginWindow);
+      }
+      broadcastStatus();
+      return { ok: false, error: "请先解锁保险箱" };
+    }
+
     if (vaultWindow && !vaultWindow.isDestroyed()) {
       vaultWindow.webContents.send("app:showVault", {
-        vault: vaultCache ?? defaultVault(),
+        vault: vaultCache,
         masterPassword: activeMasterPassword,
       });
       vaultWindow.webContents.send("app:status", {
@@ -2114,10 +2145,14 @@ function createVaultWindow() {
 
   vaultWindow.loadFile("index.html");
   vaultWindow.webContents.once("did-finish-load", () => {
-    vaultWindow.webContents.send("app:showVault", {
-      vault: vaultCache ?? defaultVault(),
-      masterPassword: activeMasterPassword,
-    });
+    if (isVaultUnlocked()) {
+      vaultWindow.webContents.send("app:showVault", {
+        vault: vaultCache,
+        masterPassword: activeMasterPassword,
+      });
+    } else {
+      vaultWindow.webContents.send("app:clearAuth");
+    }
     vaultWindow.webContents.send("app:status", {
       hasVault: loadVaultFile().exists,
       corrupted: loadVaultFile().corrupted,
@@ -2130,17 +2165,8 @@ function createVaultWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  if (process.platform === "win32") {
-    app.setAppUserModelId("com.coco.cocodense");
-  }
-
-  configureApplicationMenu();
-  wireWindowControls();
-  createVaultWindow();
-  createLoginWindow();
-
-  app.on("activate", () => {
+if (gotSingleInstanceLock) {
+  app.on("second-instance", () => {
     if (revealPrimaryWindow()) {
       return;
     }
@@ -2149,7 +2175,28 @@ app.whenReady().then(() => {
       createLoginWindow();
     }
   });
-});
+
+  app.whenReady().then(() => {
+    if (process.platform === "win32") {
+      app.setAppUserModelId("com.coco.cocodense");
+    }
+
+    configureApplicationMenu();
+    wireWindowControls();
+    createVaultWindow();
+    createLoginWindow();
+
+    app.on("activate", () => {
+      if (revealPrimaryWindow()) {
+        return;
+      }
+      if (!loginWindow && !vaultWindow) {
+        createVaultWindow();
+        createLoginWindow();
+      }
+    });
+  });
+}
 
 app.on("before-quit", () => {
   isQuitting = true;
