@@ -5,9 +5,13 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win portable",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "dist:mac:dir": "electron-builder --mac dir",
+    "dist:win": "electron-builder --win portable",
     "dist:local": "powershell -ExecutionPolicy Bypass -File build-local.ps1",
-    "dist:unpacked": "powershell -ExecutionPolicy Bypass -File build-unpacked.ps1"
+    "dist:unpacked": "powershell -ExecutionPolicy Bypass -File build-unpacked.ps1",
+    "icon:mac": "bash scripts/make-mac-icon.sh"
   },
   "devDependencies": {
     "electron": "^34.1.0",
@@ -37,6 +41,18 @@
       "target": [
         "portable"
       ]
+    },
+    "mac": {
+      "icon": "assets/app-icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "identity": null
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "directories": {
       "output": "dist"

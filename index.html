@@ -108,6 +108,7 @@
           </div>
           <div class="button-row">
             <button class="primary-btn" type="submit">解锁</button>
+            <button class="secondary-btn hidden" type="button" id="biometricUnlockBtn">指纹解锁</button>
             <button class="secondary-btn" type="button" id="bioBtn">忘记密码</button>
           </div>
           <p class="helper">
@@ -150,7 +151,13 @@
               </div>
             </div>
             <div class="topbar-actions">
-              <span class="build-pill" id="buildPill">v0.1.0</span>
+              <div class="sync-pill sync-pill-warn" id="topSyncStatus" data-sync-state="warn">
+                <span class="sync-pill-main">
+                  <span class="sync-pill-dot"></span>
+                  <span id="topSyncText">未解锁</span>
+                </span>
+                <span class="sync-pill-time" id="lastUpdateText">上次更新时间：--</span>
+              </div>
               <button class="secondary-btn" type="button" id="lockBtn">锁定</button>
               <button class="secondary-btn" type="button" id="settingsBtn">设置</button>
               <button class="primary-btn" type="button" id="newEntryBtn">新增</button>
@@ -161,12 +168,15 @@
             <aside class="sidebar">
               <div class="sidebar-tools">
                 <div class="search-row">
-                  <span aria-hidden="true">⌕</span>
+                  <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="6.5"></circle>
+                    <path d="M16.2 16.2 21 21"></path>
+                  </svg>
                   <input
                     id="searchInput"
                     type="search"
                     placeholder="搜索名称、账号、网址、标签"
-                    aria-label="搜索密码条目"
+                    aria-label="搜索密码记录"
                   />
                 </div>
 
@@ -178,8 +188,31 @@
               </div>
 
               <div class="vault-list" id="vaultList" role="list">
-                <p class="empty-state hidden" id="emptyState">没有找到条目</p>
+                <p class="empty-state hidden" id="emptyState">暂无记录</p>
               </div>
+
+              <nav class="settings-nav hidden" id="settingsNav" aria-label="设置分类">
+                <button class="settings-nav-item active" type="button" data-settings-section="security">
+                  <span>安全</span>
+                  <small>主密码、解锁、恢复</small>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-section="data-key">
+                  <span>数据钥匙</span>
+                  <small>独立加密钥匙</small>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-section="sync">
+                  <span>云同步</span>
+                  <small>WebDAV、上传下载</small>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-section="general">
+                  <span>通用</span>
+                  <small>编辑和显示习惯</small>
+                </button>
+                <button class="settings-nav-item" type="button" data-settings-section="backup">
+                  <span>备份</span>
+                  <small>导出、清理</small>
+                </button>
+              </nav>
             </aside>
 
             <section class="content">
@@ -340,91 +373,189 @@
                   <div class="settings-shell">
                     <div class="settings-head">
                       <div>
-                        <p class="eyebrow">偏好</p>
-                        <h2>设置</h2>
+                        <p class="eyebrow">设置</p>
+                        <h2 id="settingsSectionTitle">安全</h2>
                       </div>
+                      <p class="settings-section-hint" id="settingsSectionHint">主密码、解锁和恢复。</p>
                     </div>
 
-                    <div class="settings-grid">
-                      <label class="setting-card">
-                        <span>自动锁定</span>
-                        <select id="autoLockMinutes">
-                          <option value="1">1 分钟</option>
-                          <option value="5">5 分钟</option>
-                          <option value="10">10 分钟</option>
-                          <option value="30">30 分钟</option>
-                          <option value="60">1 小时</option>
-                          <option value="0">不自动锁定</option>
-                        </select>
-                      </label>
+                    <div class="settings-pages">
+                      <section class="settings-page" data-settings-page="security">
+                        <div class="settings-grid">
+                          <label class="setting-card">
+                            <span>自动锁定</span>
+                            <select id="autoLockMinutes">
+                              <option value="1">1 分钟</option>
+                              <option value="5">5 分钟</option>
+                              <option value="10">10 分钟</option>
+                              <option value="30">30 分钟</option>
+                              <option value="60">1 小时</option>
+                              <option value="0">不自动锁定</option>
+                            </select>
+                          </label>
 
-                      <label class="setting-card">
-                        <span>剪贴板清空</span>
-                        <select id="clipboardClearSeconds">
-                          <option value="10">10 秒</option>
-                          <option value="30">30 秒</option>
-                          <option value="60">1 分钟</option>
-                          <option value="180">3 分钟</option>
-                          <option value="0">不自动清空</option>
-                        </select>
-                      </label>
+                          <label class="setting-card">
+                            <span>剪贴板清空</span>
+                            <select id="clipboardClearSeconds">
+                              <option value="10">10 秒</option>
+                              <option value="30">30 秒</option>
+                              <option value="60">1 分钟</option>
+                              <option value="180">3 分钟</option>
+                              <option value="0">不自动清空</option>
+                            </select>
+                          </label>
 
-                      <label class="setting-card">
-                        <span>生成密码长度</span>
-                        <input id="passwordLengthSetting" type="number" min="1" max="40" step="1" />
-                      </label>
-
-                      <label class="setting-card switch-card">
-                        <span>复制前二次确认</span>
-                        <input id="copyConfirmSetting" type="checkbox" />
-                      </label>
-
-                      <label class="setting-card switch-card">
-                        <span>启动时显示欢迎页</span>
-                        <input id="welcomeSetting" type="checkbox" />
-                      </label>
-
-                      <label class="setting-card switch-card">
-                        <span>导出前自动备份</span>
-                        <input id="backupExportSetting" type="checkbox" />
-                      </label>
-
-                      <div class="setting-card recovery-setting">
-                        <div class="recovery-setting-head">
-                          <div>
-                            <span>安全问题找回</span>
-                            <p id="recoveryStatusText">未设置，忘记主密码时将无法恢复。</p>
+                          <div class="setting-card recovery-setting">
+                            <div class="recovery-setting-head">
+                              <div>
+                                <span>安全问题找回</span>
+                                <p id="recoveryStatusText">未设置，忘记主密码时将无法恢复。</p>
+                              </div>
+                              <span class="recovery-pill" id="recoveryStatusPill">未设置</span>
+                            </div>
+                            <div class="recovery-actions compact">
+                              <button class="secondary-btn" type="button" id="openRecoverySettingsBtn">编辑安全问题</button>
+                            </div>
                           </div>
-                          <span class="recovery-pill" id="recoveryStatusPill">未设置</span>
-                        </div>
-                        <div class="recovery-actions compact">
-                          <button class="secondary-btn" type="button" id="openRecoverySettingsBtn">编辑安全问题</button>
-                        </div>
-                      </div>
 
-                      <div class="setting-card action-setting">
-                        <div>
-                          <span>修改主密码</span>
-                          <p>修改后，下一次解锁请使用新的主密码。</p>
-                        </div>
-                        <button class="secondary-btn" type="button" id="changePasswordBtn">改密码</button>
-                      </div>
+                          <div class="setting-card recovery-setting">
+                            <div class="recovery-setting-head">
+                              <div>
+                                <span>Touch ID 解锁</span>
+                                <p id="biometricStatusText">未启用，解锁时仍需输入主密码。</p>
+                              </div>
+                              <span class="recovery-pill" id="biometricStatusPill">未启用</span>
+                            </div>
+                            <div class="recovery-actions compact">
+                              <button class="secondary-btn" type="button" id="biometricToggleBtn">启用 Touch ID</button>
+                            </div>
+                          </div>
 
-                      <div class="setting-card action-setting">
-                        <div>
-                          <span>导出加密文件</span>
-                          <p>将当前保险箱导出为加密文件，可用于备份或同步。</p>
+                          <div class="setting-card action-setting">
+                            <div>
+                              <span>修改主密码</span>
+                              <p>修改后，下一次解锁请使用新的主密码。</p>
+                            </div>
+                            <button class="secondary-btn" type="button" id="changePasswordBtn">改密码</button>
+                          </div>
                         </div>
-                        <button class="secondary-btn" type="button" id="syncBtn">导出</button>
-                      </div>
+                      </section>
 
-                      <div class="setting-card danger-setting">
-                        <div>
-                          <span>清空全部密码</span>
-                          <p>删除当前保险箱中的全部密码条目，设置项会保留。</p>
+                      <section class="settings-page hidden" data-settings-page="data-key">
+                        <div class="settings-grid">
+                          <div class="setting-card recovery-setting data-key-setting">
+                            <div class="recovery-setting-head">
+                              <div>
+                                <span>数据钥匙</span>
+                                <p id="dataKeyStatusText">未设置。保存后，保险箱内容将改由数据钥匙解密。</p>
+                              </div>
+                              <span class="recovery-pill" id="dataKeyStatusPill">未设置</span>
+                            </div>
+                            <label class="field compact-field">
+                              <span>输入或生成数据钥匙</span>
+                              <input id="dataKeyInput" type="text" autocomplete="off" placeholder="输入新的数据钥匙可修改" />
+                            </label>
+                            <label class="setting-toggle-row">
+                              <input id="rememberDataKeySetting" type="checkbox" checked />
+                              <span>本机记住数据钥匙</span>
+                            </label>
+                            <div class="data-key-actions">
+                              <button class="secondary-btn" type="button" id="generateDataKeyBtn">生成</button>
+                              <button class="primary-btn" type="button" id="saveDataKeyBtn">保存数据钥匙</button>
+                              <button class="danger-outline-btn" type="button" id="clearDataKeyBtn">清除</button>
+                            </div>
+                          </div>
                         </div>
-                        <button class="danger-outline-btn" type="button" id="clearAllEntriesBtn">清空</button>
-                      </div>
+                      </section>
+
+                      <section class="settings-page hidden" data-settings-page="sync">
+                        <div class="settings-grid">
+                          <label class="setting-card sync-check-setting">
+                            <span>自动检查云端更新</span>
+                            <input id="cloudCheckMinutes" type="number" min="1" max="240" step="1" />
+                            <p>每隔多少分钟检查一次坚果云上的最新保险箱。默认 5 分钟。</p>
+                          </label>
+
+                          <div class="setting-card action-setting">
+                            <div>
+                              <span>导出加密文件</span>
+                              <p>将当前保险箱导出为加密文件，可用于备份或同步。</p>
+                            </div>
+                            <button class="secondary-btn" type="button" id="syncBtn">导出</button>
+                          </div>
+
+                          <div class="setting-card webdav-setting">
+                            <div class="recovery-setting-head">
+                              <div>
+                                <span>WebDAV 同步</span>
+                                <p id="webdavStatusText">未配置。坚果云只保存加密后的保险箱文件。</p>
+                              </div>
+                              <span class="recovery-pill" id="webdavStatusPill">未配置</span>
+                            </div>
+                            <div class="webdav-form">
+                              <label>
+                                地址
+                                <input id="webdavServerUrl" type="url" placeholder="https://dav.jianguoyun.com/dav/" />
+                              </label>
+                              <label>
+                                用户名
+                                <input id="webdavUsername" type="text" autocomplete="username" placeholder="坚果云邮箱" />
+                              </label>
+                              <label>
+                                应用密码
+                                <input id="webdavAppPassword" type="password" autocomplete="off" placeholder="输入新的应用密码可修改" />
+                              </label>
+                              <label>
+                                远端路径
+                                <input id="webdavRemotePath" type="text" placeholder="/CocoDense/vault.json" />
+                              </label>
+                            </div>
+                            <div class="webdav-actions">
+                              <button class="secondary-btn" type="button" id="saveWebdavBtn">保存配置</button>
+                              <button class="secondary-btn" type="button" id="testWebdavBtn">测试连接</button>
+                              <button class="primary-btn" type="button" id="uploadWebdavBtn">上传到坚果云</button>
+                              <button class="secondary-btn" type="button" id="downloadWebdavBtn">从坚果云下载</button>
+                              <button class="secondary-btn" type="button" id="mergeWebdavBtn">双向合并</button>
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+
+                      <section class="settings-page hidden" data-settings-page="general">
+                        <div class="settings-grid">
+                          <label class="setting-card">
+                            <span>生成密码长度</span>
+                            <input id="passwordLengthSetting" type="number" min="1" max="40" step="1" />
+                          </label>
+
+                          <label class="setting-card switch-card">
+                            <span>复制前二次确认</span>
+                            <input id="copyConfirmSetting" type="checkbox" />
+                          </label>
+
+                          <label class="setting-card switch-card">
+                            <span>启动时显示欢迎页</span>
+                            <input id="welcomeSetting" type="checkbox" />
+                          </label>
+                        </div>
+                      </section>
+
+                      <section class="settings-page hidden" data-settings-page="backup">
+                        <div class="settings-grid">
+                          <label class="setting-card switch-card">
+                            <span>导出前自动备份</span>
+                            <input id="backupExportSetting" type="checkbox" />
+                          </label>
+
+                          <div class="setting-card danger-setting">
+                            <div>
+                              <span>清空全部密码</span>
+                              <p>删除当前保险箱中的全部密码记录，设置项会保留。</p>
+                            </div>
+                            <button class="danger-outline-btn" type="button" id="clearAllEntriesBtn">清空</button>
+                          </div>
+                        </div>
+                      </section>
                     </div>
                   </div>
                 </div>

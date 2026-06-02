@@ -94,7 +94,7 @@ body.auth-mode .app-shell {
   width: 100vw;
   height: 100dvh;
   margin: 0;
-  padding: 62px 34px 30px;
+  padding: 48px 24px 24px;
   border-radius: 0;
   box-shadow: none;
 }
@@ -125,7 +125,7 @@ body:not(.auth-mode) .auth-screen {
 
 .auth-top {
   align-items: flex-start;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .eyebrow {
@@ -144,13 +144,13 @@ p {
 }
 
 h1 {
-  font-size: clamp(28px, 4vw, 36px);
+  font-size: clamp(24px, 4vw, 30px);
   line-height: 1.02;
   letter-spacing: -0.04em;
 }
 
 h2 {
-  font-size: clamp(19px, 2.2vw, 26px);
+  font-size: clamp(17px, 2.2vw, 22px);
   line-height: 1.12;
   letter-spacing: -0.035em;
 }
@@ -164,20 +164,20 @@ h2 {
 }
 
 .auth-mark {
-  width: 54px;
-  height: 54px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
-  border-radius: 16px;
+  border-radius: 13px;
 }
 
 .mark-icon {
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
 }
 
 .auth-form {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin-top: 0;
 }
 
@@ -202,9 +202,9 @@ textarea {
 .search-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 11px;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 input,
@@ -217,9 +217,9 @@ textarea {
 }
 
 textarea {
-  min-height: 104px;
-  padding: 11px;
-  line-height: 1.6;
+  min-height: 84px;
+  padding: 10px;
+  line-height: 1.5;
   resize: vertical;
 }
 
@@ -239,14 +239,15 @@ textarea::placeholder {
 }
 
 .auth-form .button-row {
-  display: grid;
-  grid-template-columns: 96px 112px;
+  display: flex;
+  flex-wrap: wrap;
   justify-content: start;
 }
 
 .auth-form .primary-btn,
 .auth-form .secondary-btn {
-  width: 100%;
+  min-width: 96px;
+  padding-inline: 14px;
 }
 
 .primary-btn,
@@ -254,9 +255,9 @@ textarea::placeholder {
 .text-btn,
 .chip,
 .nav-item {
-  min-height: 34px;
+  min-height: 30px;
   border-radius: 9px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -296,8 +297,8 @@ textarea::placeholder {
 
 .helper {
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .vault-screen {
@@ -312,20 +313,24 @@ textarea::placeholder {
   overflow: hidden;
   min-height: 100dvh;
   border: 0;
-  border-radius: 24px;
+  border-radius: 16px;
   background: linear-gradient(180deg, #fbfcfe 0%, #f3f6fa 100%);
 }
 
 .app-header {
   position: relative;
   justify-content: space-between;
-  gap: 18px;
-  min-height: 64px;
-  padding: 12px 18px 12px 86px;
+  gap: 10px;
+  min-height: 50px;
+  padding: 8px 12px 8px 70px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.75);
   -webkit-app-region: drag;
   app-region: drag;
+}
+
+.native-window-controls .app-header {
+  padding-left: 82px;
 }
 
 .window-drag {
@@ -346,19 +351,29 @@ textarea::placeholder {
 .topbar-actions {
   position: relative;
   z-index: 10;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
 
-.build-pill {
+.content-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.sync-pill {
   display: inline-flex;
   align-items: center;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid rgba(0, 122, 255, 0.12);
+  gap: 8px;
+  min-height: 26px;
+  max-width: 260px;
+  padding: 4px 9px;
+  border: 1px solid rgba(60, 60, 67, 0.1);
   border-radius: 999px;
-  color: var(--accent);
-  background: rgba(0, 122, 255, 0.07);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.64);
   font-size: 11px;
   font-weight: 700;
   user-select: none;
@@ -366,9 +381,74 @@ textarea::placeholder {
   app-region: no-drag;
 }
 
+.sync-pill-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.sync-pill-main > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sync-pill-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ffb800;
+  box-shadow: 0 0 0 4px rgba(255, 184, 0, 0.12);
+}
+
+.sync-pill-time {
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-pill-ok {
+  border-color: rgba(52, 199, 89, 0.18);
+  background: rgba(52, 199, 89, 0.08);
+}
+
+.sync-pill-ok .sync-pill-dot {
+  background: #34c759;
+  box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.12);
+}
+
+.sync-pill-warn {
+  border-color: rgba(255, 184, 0, 0.22);
+  background: rgba(255, 184, 0, 0.09);
+}
+
+.sync-pill-warn .sync-pill-dot {
+  background: #ffb800;
+  box-shadow: 0 0 0 4px rgba(255, 184, 0, 0.13);
+}
+
+.sync-pill-error {
+  border-color: rgba(255, 59, 48, 0.2);
+  background: rgba(255, 59, 48, 0.08);
+}
+
+.sync-pill-error .sync-pill-dot {
+  background: #ff3b30;
+  box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.12);
+}
+
 .auth-traffic-lights {
   top: 20px;
   left: 20px;
+}
+
+/* macOS 使用系统原生红黄绿窗口按钮，隐藏页面自绘按钮以避免重叠。 */
+.native-window-controls .traffic-lights {
+  display: none;
 }
 
 .auth-screen .eyebrow,
@@ -416,8 +496,8 @@ textarea::placeholder {
 
 .app-body {
   display: grid;
-  grid-template-columns: 288px minmax(0, 1fr);
-  height: calc(100dvh - 64px);
+  grid-template-columns: minmax(190px, 220px) minmax(0, 1fr);
+  height: calc(100dvh - 50px);
   min-height: 0;
 }
 
@@ -426,7 +506,7 @@ textarea::placeholder {
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
-  padding: 16px;
+  padding: 10px;
   border-right: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(247, 249, 252, 0.92), rgba(242, 245, 249, 0.92));
 }
@@ -434,30 +514,82 @@ textarea::placeholder {
 .sidebar-tools {
   position: relative;
   z-index: 1;
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   background: linear-gradient(180deg, rgba(247, 249, 252, 0.98), rgba(247, 249, 252, 0.86));
+}
+
+.sidebar.settings-mode {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.sidebar.settings-mode .sidebar-tools,
+.sidebar.settings-mode .vault-list {
+  display: none !important;
+}
+
+.settings-nav {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 0;
+}
+
+.settings-nav-item {
+  display: grid;
+  gap: 3px;
+  min-height: 48px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.settings-nav-item span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-nav-item small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.settings-nav-item:hover {
+  background: rgba(0, 122, 255, 0.06);
+}
+
+.settings-nav-item.active {
+  border-color: rgba(0, 122, 255, 0.16);
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.settings-nav-item.active small {
+  color: rgba(0, 88, 180, 0.72);
 }
 
 .content {
   display: grid;
-  gap: 18px;
+  gap: 12px;
   align-content: start;
   min-height: 0;
   overflow: auto;
-  padding: 22px 22px 28px;
+  padding: 12px 14px 16px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 253, 0.92));
 }
 
 .content.empty-detail-mode {
   gap: 0;
-  padding: 22px;
+  padding: 14px;
 }
 
 .content.empty-detail-mode .detail-panel {
   display: grid;
   place-items: center;
   min-height: 100%;
-  padding-block: 44px 24px;
+  padding-block: 24px 16px;
 }
 
 .content.empty-detail-mode .read-view,
@@ -474,7 +606,7 @@ textarea::placeholder {
 .content.settings-mode {
   align-content: stretch;
   gap: 0;
-  padding: 22px;
+  padding: 12px 14px 16px;
 }
 
 .content.settings-mode .footer-row,
@@ -495,24 +627,24 @@ textarea::placeholder {
 
 .detail-panel {
   display: grid;
-  gap: 18px;
+  gap: 12px;
   min-height: 0;
 }
 
 .read-view,
 .edit-view {
   display: grid;
-  gap: 18px;
+  gap: 12px;
 }
 
 .empty-detail {
   display: grid;
   place-items: center;
   align-content: center;
-  width: min(100%, 420px);
-  min-height: min(470px, calc(100dvh - 170px));
+  width: min(100%, 320px);
+  min-height: min(300px, calc(100dvh - 130px));
   margin: auto;
-  padding: 22px 24px 30px;
+  padding: 14px 16px 18px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -524,11 +656,11 @@ textarea::placeholder {
   position: relative;
   display: grid;
   place-items: center;
-  width: 132px;
-  height: 132px;
-  margin-bottom: 14px;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 10px;
   border: 1px solid rgba(0, 122, 255, 0.06);
-  border-radius: 34px;
+  border-radius: 24px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(247, 250, 253, 0.58));
   box-shadow:
     0 18px 50px rgba(31, 42, 68, 0.06),
@@ -545,34 +677,48 @@ textarea::placeholder {
 }
 
 .empty-detail-mark img {
-  width: 82px;
-  height: 82px;
+  width: 56px;
+  height: 56px;
   object-fit: contain;
 }
 
 .empty-detail-title {
   color: var(--text);
-  margin-top: 0;
-  font-family: "Avenir Next", "Segoe UI Variable Display", "SF Pro Display", "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 26px;
-  font-weight: 850;
-  letter-spacing: -0.05em;
+  position: relative;
+  margin-top: 2px;
+  padding-bottom: 10px;
+  font-family: "SF Pro Display", "Avenir Next", "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   text-rendering: optimizeLegibility;
+}
+
+.empty-detail-title::after {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 28px;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.42);
+  content: "";
+  transform: translateX(-50%);
 }
 
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .detail-tile {
   display: grid;
-  gap: 8px;
-  min-height: 92px;
-  padding: 14px 16px;
+  gap: 5px;
+  min-height: 66px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 14px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.9);
   text-align: left;
@@ -594,7 +740,7 @@ textarea::placeholder {
 .detail-tile span,
 .read-section-title {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -608,8 +754,8 @@ textarea::placeholder {
 .detail-tile strong {
   overflow: hidden;
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -622,8 +768,8 @@ textarea::placeholder {
 .eye-btn {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   color: var(--muted);
   background: transparent;
@@ -635,13 +781,13 @@ textarea::placeholder {
 }
 
 .eye-icon {
-  width: 17px;
-  height: 17px;
+  width: 15px;
+  height: 15px;
 }
 
 .read-section {
   display: grid;
-  gap: 10px;
+  gap: 7px;
 }
 
 .read-tags {
@@ -651,30 +797,53 @@ textarea::placeholder {
 }
 
 .read-notes {
-  padding: 14px 16px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 14px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.86);
-  line-height: 1.6;
-  font-size: 13px;
+  line-height: 1.45;
+  font-size: 12px;
   white-space: pre-wrap;
 }
 
 .search-row {
   color: var(--muted);
   background: rgba(255, 255, 255, 0.66);
+  font-size: 11px;
+}
+
+.search-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: #7d828a;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  fill: none;
+}
+
+.search-row input {
+  font-size: 11px;
+}
+
+.empty-state {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .chip-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 12px 0 0;
+  gap: 6px;
+  margin: 8px 0 0;
 }
 
 .chip {
-  padding: 0 12px;
+  padding: 0 9px;
   color: var(--muted);
 }
 
@@ -687,12 +856,12 @@ textarea::placeholder {
 
 .vault-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   align-content: start;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 4px 2px 18px 0;
+  padding: 2px 1px 12px 0;
   scrollbar-width: none;
 }
 
@@ -705,12 +874,12 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
-  min-height: 64px;
-  padding: 12px 14px;
+  min-height: 48px;
+  padding: 9px 10px;
   border: 1px solid rgba(60, 60, 67, 0.08);
-  border-radius: 18px;
+  border-radius: 13px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.74);
   text-align: left;
@@ -783,7 +952,7 @@ textarea::placeholder {
 
 .item-main strong {
   color: #111827;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
@@ -809,17 +978,17 @@ textarea::placeholder {
 
 .item-main span {
   color: #73777f;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
 .badge {
   flex: 0 0 auto;
-  padding: 4px 9px;
+  padding: 3px 7px;
   border-radius: 999px;
   color: var(--muted);
   background: rgba(60, 60, 67, 0.06);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
@@ -857,49 +1026,121 @@ textarea::placeholder {
 .settings-view {
   display: grid;
   min-height: 100%;
-  place-items: center;
+  place-items: start stretch;
 }
 
 .settings-shell {
-  width: min(100%, 760px);
-  padding: 10px 6px 18px;
+  width: min(100%, 860px);
+  margin: 0 auto;
+  padding: 4px 2px 10px;
 }
 
 .settings-head {
   display: grid;
   gap: 4px;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
+}
+
+.settings-section-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-pages {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+}
+
+.settings-page {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
 }
 
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
+}
+
+.data-key-setting {
+  grid-column: 1 / -1;
+}
+
+.data-key-setting p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sync-check-setting {
+  grid-column: 1 / -1;
+}
+
+.sync-check-setting p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sync-check-setting input[type="number"] {
+  width: 140px;
 }
 
 .setting-card {
   display: grid;
-  gap: 10px;
-  padding: 16px 16px 14px;
+  gap: 8px;
+  padding: 11px 12px 10px;
   border: 1px solid rgba(60, 60, 67, 0.09);
-  border-radius: 18px;
+  border-radius: 13px;
   background: rgba(255, 255, 255, 0.88);
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.8);
 }
 
 .setting-card span {
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .setting-card select,
-.setting-card input[type="number"] {
-  min-height: 40px;
-  padding: 0 12px;
+.setting-card input[type="number"],
+.setting-card input[type="text"],
+.setting-card input[type="password"] {
+  min-height: 32px;
+  padding: 0 10px;
   border: 1px solid rgba(60, 60, 67, 0.14);
-  border-radius: 14px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.98);
+}
+
+.compact-field {
+  display: grid;
+  gap: 6px;
+}
+
+.compact-field span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.setting-toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.setting-toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
 }
 
 .switch-card {
@@ -908,8 +1149,8 @@ textarea::placeholder {
 }
 
 .switch-card input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--accent);
 }
 
@@ -917,7 +1158,7 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   border-color: rgba(255, 59, 48, 0.16);
   background: rgba(255, 59, 48, 0.05);
 }
@@ -929,14 +1170,14 @@ textarea::placeholder {
 .danger-setting p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.42;
 }
 
 .danger-outline-btn {
   flex: 0 0 auto;
-  min-height: 34px;
-  padding: 0 14px;
+  min-height: 30px;
+  padding: 0 11px;
   border: 1px solid rgba(255, 59, 48, 0.22);
   border-radius: 12px;
   color: #b42318;
@@ -953,26 +1194,26 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
 }
 
 .action-setting p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.42;
 }
 
 .recovery-setting {
-  gap: 8px;
-  padding-bottom: 12px;
+  gap: 7px;
+  padding-bottom: 10px;
 }
 
 .recovery-setting-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .recovery-setting-head span,
@@ -983,18 +1224,18 @@ textarea::placeholder {
 .recovery-setting-head p {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.42;
   max-width: 420px;
 }
 
 .recovery-pill {
   flex: 0 0 auto;
-  padding: 5px 10px;
+  padding: 4px 8px;
   border-radius: 999px;
   color: #6b7280;
   background: rgba(60, 60, 67, 0.08);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -1023,7 +1264,7 @@ textarea::placeholder {
 
 .recovery-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
@@ -1031,8 +1272,50 @@ textarea::placeholder {
   justify-content: flex-start;
 }
 
+.data-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.data-key-actions button {
+  min-height: 32px;
+}
+
+.webdav-setting {
+  grid-column: 1 / -1;
+}
+
+.webdav-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.webdav-form label {
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.webdav-form input {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(60, 60, 67, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  font-size: 11px;
+}
+
+.webdav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .recovery-modal-sheet {
-  width: min(560px, calc(100vw - 28px));
+  width: min(460px, calc(100vw - 28px));
 }
 
 .recovery-form {
@@ -1070,7 +1353,7 @@ textarea::placeholder {
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 13px 14px;
+  gap: 10px 11px;
   align-items: start;
 }
 
@@ -1082,7 +1365,7 @@ textarea::placeholder {
 .field-block > label {
   min-height: 15px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -1095,17 +1378,17 @@ textarea::placeholder {
 .form-grid > label > .input-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border: 1px solid rgba(60, 60, 67, 0.13);
-  border-radius: 16px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.82);
   box-shadow: none;
   transition: border-color 140ms ease, background 140ms ease;
 }
 
 .form-grid > label > input {
-  min-height: 39px;
-  padding: 0 13px;
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 .form-grid > label:nth-child(4) > .input-row {
@@ -1113,8 +1396,8 @@ textarea::placeholder {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   width: 100%;
-  min-height: 39px;
-  padding: 0 8px 0 12px;
+  min-height: 34px;
+  padding: 0 6px 0 10px;
 }
 
 .form-grid > label:nth-child(4) > .input-row input {
@@ -1123,9 +1406,9 @@ textarea::placeholder {
 }
 
 .form-grid > label > textarea {
-  min-height: 76px;
-  max-height: 108px;
-  padding: 11px 13px;
+  min-height: 62px;
+  max-height: 96px;
+  padding: 9px 10px;
   resize: vertical;
 }
 
@@ -1141,10 +1424,10 @@ textarea::placeholder {
 .password-toggle {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--muted);
   background: transparent;
 }
@@ -1159,8 +1442,8 @@ textarea::placeholder {
 }
 
 .toggle-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .strength-meter {
@@ -1213,8 +1496,8 @@ textarea::placeholder {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
+  gap: 6px;
+  min-height: 30px;
   padding: 0;
 }
 
@@ -1238,7 +1521,7 @@ textarea::placeholder {
 .priority-field label,
 .pin-field label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -1255,18 +1538,18 @@ textarea::placeholder {
   border: 1px solid rgba(60, 60, 67, 0.12);
   color: var(--text);
   background: rgba(255, 255, 255, 0.82);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
 .priority-choice {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 0 12px 0 10px;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 9px 0 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1;
   background: rgba(255, 255, 255, 0.88);
   position: relative;
@@ -1282,7 +1565,7 @@ textarea::placeholder {
 }
 
 .priority-choice span:last-child {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1325,8 +1608,8 @@ textarea::placeholder {
   justify-content: center;
   gap: 6px;
   width: auto;
-  min-width: 86px;
-  min-height: 30px;
+  min-width: 74px;
+  min-height: 26px;
   border-radius: 999px;
 }
 
@@ -1364,10 +1647,10 @@ textarea::placeholder {
 }
 
 .tag-field input {
-  min-height: 32px;
-  padding: 0 11px;
+  min-height: 28px;
+  padding: 0 9px;
   border: 1px solid rgba(60, 60, 67, 0.12);
-  border-radius: 14px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.82);
 }
 
@@ -1440,6 +1723,16 @@ textarea::placeholder {
   border-radius: 999px;
   background: #34c759;
   box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.1);
+}
+
+.status-dot-warn {
+  background: #ffb800;
+  box-shadow: 0 0 0 4px rgba(255, 184, 0, 0.12);
+}
+
+.status-dot-error {
+  background: #ff3b30;
+  box-shadow: 0 0 0 4px rgba(255, 59, 48, 0.12);
 }
 
 .sync-status {
@@ -1656,7 +1949,7 @@ textarea::placeholder {
   margin-top: 4px;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 600px) {
   .app-body {
     grid-template-columns: 1fr;
     min-height: auto;
@@ -1666,13 +1959,17 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 560px) {
   .app-shell {
     padding: 12px;
   }
@@ -1685,18 +1982,18 @@ textarea::placeholder {
     width: 100vw;
     height: 100dvh;
     margin: 0;
-    padding: 62px 34px 30px;
+    padding: 48px 24px 24px;
   }
 
   .app-card {
     min-height: 100dvh;
-    border-radius: 20px;
+    border-radius: 16px;
   }
 
   .app-header {
     align-items: flex-start;
     flex-direction: column;
-    padding: 48px 16px 14px;
+    padding: 42px 12px 10px;
   }
 
   .window-drag {
@@ -1721,6 +2018,12 @@ textarea::placeholder {
     width: 100%;
   }
 
+  body:not(.auth-mode) .sync-pill {
+    width: 100%;
+    max-width: none;
+    justify-content: space-between;
+  }
+
   body:not(.auth-mode) .topbar-actions button,
   body:not(.auth-mode) .content-actions button,
   body:not(.auth-mode) .button-row button,
@@ -1732,9 +2035,17 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 
+  .webdav-form {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar,
   .content {
-    padding: 14px 14px 22px;
+    padding: 10px 10px 14px;
+  }
+
+  .settings-shell {
+    padding: 2px 0 8px;
   }
 
   .mobile-nav {

@@ -4,6 +4,7 @@ const unlockForm = document.getElementById("unlockForm");
 const togglePassword = document.getElementById("togglePassword");
 const masterPassword = document.getElementById("masterPassword");
 const bioBtn = document.getElementById("bioBtn");
+const biometricUnlockBtn = document.getElementById("biometricUnlockBtn");
 const toast = document.getElementById("toast");
 const newEntryBtn = document.getElementById("newEntryBtn");
 const lockBtn = document.getElementById("lockBtn");
@@ -27,10 +28,16 @@ const deleteEntryBtn = document.getElementById("deleteEntryBtn");
 const content = document.querySelector(".content");
 const sidebar = document.querySelector(".sidebar");
 const settingsBtn = document.getElementById("settingsBtn");
+const topSyncStatus = document.getElementById("topSyncStatus");
+const topSyncText = document.getElementById("topSyncText");
+const lastUpdateText = document.getElementById("lastUpdateText");
 const readView = document.getElementById("readView");
 const editView = document.getElementById("editView");
 const emptyDetailState = document.getElementById("emptyDetailState");
 const settingsView = document.getElementById("settingsView");
+const settingsNav = document.getElementById("settingsNav");
+const settingsSectionTitle = document.getElementById("settingsSectionTitle");
+const settingsSectionHint = document.getElementById("settingsSectionHint");
 const detailModeLabel = document.getElementById("detailModeLabel");
 const entryContextMenu = document.getElementById("entryContextMenu");
 const siteValue = document.getElementById("siteValue");
@@ -41,6 +48,7 @@ const toggleReadPassword = document.getElementById("toggleReadPassword");
 const notesValue = document.getElementById("notesValue");
 const readTags = document.getElementById("readTags");
 const syncText = document.getElementById("syncText");
+const footerStatusDot = document.querySelector(".sync-status .status-dot");
 const syncBtn = document.getElementById("syncBtn");
 const importVaultBtn = document.getElementById("importVaultBtn");
 const changePasswordBtn = document.getElementById("changePasswordBtn");
@@ -49,6 +57,7 @@ const priorityPicker = document.getElementById("priorityPicker");
 const pinnedToggle = document.getElementById("pinnedToggle");
 const autoLockMinutes = document.getElementById("autoLockMinutes");
 const clipboardClearSeconds = document.getElementById("clipboardClearSeconds");
+const cloudCheckMinutes = document.getElementById("cloudCheckMinutes");
 const passwordLengthSetting = document.getElementById("passwordLengthSetting");
 const copyConfirmSetting = document.getElementById("copyConfirmSetting");
 const welcomeSetting = document.getElementById("welcomeSetting");
@@ -75,6 +84,27 @@ const cancelForgotPasswordBtn = document.getElementById("cancelForgotPasswordBtn
 const submitForgotPasswordBtn = document.getElementById("submitForgotPasswordBtn");
 const recoveryStatusText = document.getElementById("recoveryStatusText");
 const recoveryStatusPill = document.getElementById("recoveryStatusPill");
+const biometricStatusText = document.getElementById("biometricStatusText");
+const biometricStatusPill = document.getElementById("biometricStatusPill");
+const biometricToggleBtn = document.getElementById("biometricToggleBtn");
+const dataKeyStatusText = document.getElementById("dataKeyStatusText");
+const dataKeyStatusPill = document.getElementById("dataKeyStatusPill");
+const dataKeyInput = document.getElementById("dataKeyInput");
+const rememberDataKeySetting = document.getElementById("rememberDataKeySetting");
+const generateDataKeyBtn = document.getElementById("generateDataKeyBtn");
+const saveDataKeyBtn = document.getElementById("saveDataKeyBtn");
+const clearDataKeyBtn = document.getElementById("clearDataKeyBtn");
+const webdavStatusText = document.getElementById("webdavStatusText");
+const webdavStatusPill = document.getElementById("webdavStatusPill");
+const webdavServerUrl = document.getElementById("webdavServerUrl");
+const webdavUsername = document.getElementById("webdavUsername");
+const webdavAppPassword = document.getElementById("webdavAppPassword");
+const webdavRemotePath = document.getElementById("webdavRemotePath");
+const saveWebdavBtn = document.getElementById("saveWebdavBtn");
+const testWebdavBtn = document.getElementById("testWebdavBtn");
+const uploadWebdavBtn = document.getElementById("uploadWebdavBtn");
+const downloadWebdavBtn = document.getElementById("downloadWebdavBtn");
+const mergeWebdavBtn = document.getElementById("mergeWebdavBtn");
 const openRecoverySettingsBtn = document.getElementById("openRecoverySettingsBtn");
 const recoverySettingsModal = document.getElementById("recoverySettingsModal");
 const recoverySettingsForm = document.getElementById("recoverySettingsForm");
@@ -91,6 +121,8 @@ const closeWindowBtn = document.getElementById("closeWindowBtn");
 const minimizeWindowBtn = document.getElementById("minimizeWindowBtn");
 const maximizeWindowBtn = document.getElementById("maximizeWindowBtn");
 
+document.body.classList.toggle("native-window-controls", window.vault?.platform === "darwin");
+
 const PRIORITY_ORDER = {
   red: 4,
   yellow: 3,
@@ -104,6 +136,30 @@ const PRIORITY_LABELS = {
   blue: "普通",
   green: "低优先级",
 };
+const SECRET_MASK = "●●●●●●●●";
+
+const SETTINGS_SECTIONS = {
+  security: {
+    title: "安全",
+    hint: "主密码、解锁和恢复。",
+  },
+  "data-key": {
+    title: "数据钥匙",
+    hint: "独立加密钥匙。",
+  },
+  sync: {
+    title: "云同步",
+    hint: "WebDAV、上传和下载。",
+  },
+  general: {
+    title: "通用",
+    hint: "编辑和显示习惯。",
+  },
+  backup: {
+    title: "备份",
+    hint: "导出和清理。",
+  },
+};
 
 const state = {
   entries: [],
@@ -111,6 +167,7 @@ const state = {
   unlocked: false,
   editing: false,
   detailMode: "welcome",
+  settingsSection: "security",
   editTags: [],
   pendingActions: {},
   readPasswordVisible: false,
@@ -119,6 +176,7 @@ const state = {
   settings: {
     autoLockMinutes: 5,
     clipboardClearSeconds: 30,
+    cloudCheckMinutes: 5,
     passwordLength: 18,
     copyConfirm: true,
     welcomeOnStart: true,
@@ -126,6 +184,18 @@ const state = {
   },
   autoLockTimer: null,
   clipboardTimer: null,
+  cloudCheckTimer: null,
+  cloudCheckBusy: false,
+  syncBusy: false,
+  unlockSyncJob: null,
+  persistJob: null,
+  persistQueuedPayload: null,
+  cloudSyncJob: null,
+  cloudSyncQueuedPayload: null,
+  syncError: "",
+  pendingCloudUpdate: false,
+  pendingCloudPayload: null,
+  pendingCloudUpdatedAt: 0,
   hasVaultFile: false,
   vaultCorrupted: false,
   lockedUntil: 0,
@@ -138,6 +208,30 @@ const state = {
     corrupted: false,
     questions: [],
     updatedAt: "",
+  },
+  biometricStatus: {
+    supported: false,
+    configured: false,
+    corrupted: false,
+    updatedAt: "",
+    unavailableReason: "",
+  },
+  dataKeyStatus: {
+    supported: false,
+    remembered: false,
+    sessionActive: false,
+    corrupted: false,
+    updatedAt: "",
+    unavailableReason: "",
+  },
+  syncConfig: {
+    configured: false,
+    corrupted: false,
+    serverUrl: "",
+    username: "",
+    remotePath: "/CocoDense/vault.json",
+    updatedAt: "",
+    lastSyncedAt: "",
   },
 };
 
@@ -172,10 +266,12 @@ function buildSearchIndex(entry) {
 function normalizeSettings(settings = {}) {
   const autoLockMinutesValue = Number(settings.autoLockMinutes);
   const clipboardSecondsValue = Number(settings.clipboardClearSeconds);
+  const cloudCheckMinutesValue = Number(settings.cloudCheckMinutes);
   const passwordLengthValue = Number(settings.passwordLength);
   return {
     autoLockMinutes: Number.isFinite(autoLockMinutesValue) ? autoLockMinutesValue : 5,
     clipboardClearSeconds: Number.isFinite(clipboardSecondsValue) ? clipboardSecondsValue : 30,
+    cloudCheckMinutes: Number.isFinite(cloudCheckMinutesValue) ? Math.min(240, Math.max(1, cloudCheckMinutesValue)) : 5,
     passwordLength: Math.min(40, Math.max(8, Number.isFinite(passwordLengthValue) ? passwordLengthValue : 18)),
     copyConfirm: settings.copyConfirm !== false,
     welcomeOnStart: settings.welcomeOnStart !== false,
@@ -196,6 +292,9 @@ function normalizeEntry(entry) {
     favorite: Boolean(entry?.favorite),
     pinned: Boolean(entry?.pinned),
     priority,
+    createdAt: entry?.createdAt || entry?.lastUsedAt || "",
+    updatedAt: entry?.updatedAt || entry?.lastUsedAt || "",
+    deletedAt: entry?.deletedAt || "",
     lastUsedAt: entry?.lastUsedAt || "",
     status: entry?.status || "已同步",
   };
@@ -206,6 +305,23 @@ function showToast(message) {
   toast.classList.remove("hidden");
   clearTimeout(window.toastTimer);
   window.toastTimer = setTimeout(() => toast.classList.add("hidden"), 2200);
+}
+
+function setSecretMask(input) {
+  if (!input) return;
+  input.value = SECRET_MASK;
+  input.dataset.secretMasked = "true";
+}
+
+function clearSecretMask(input) {
+  if (!input || input.dataset.secretMasked !== "true") return;
+  input.value = "";
+  delete input.dataset.secretMasked;
+}
+
+function getSecretInputValue(input) {
+  if (!input || input.dataset.secretMasked === "true") return "";
+  return input.value.trim();
 }
 
 function updateUnlockCooldown(lockedUntil) {
@@ -233,6 +349,10 @@ function clearClipboardLater() {
 
 function clearSensitiveInputs() {
   masterPassword.value = "";
+  if (dataKeyInput) {
+    clearSecretMask(dataKeyInput);
+    dataKeyInput.value = "";
+  }
   currentMasterPassword.value = "";
   nextMasterPassword.value = "";
   confirmMasterPassword.value = "";
@@ -261,7 +381,11 @@ function setActiveEntry(id) {
 
 function getActiveEntry() {
   if (!state.activeId) return null;
-  return state.entries.find((entry) => entry.id === state.activeId) ?? null;
+  return state.entries.find((entry) => entry.id === state.activeId && !entry.deletedAt) ?? null;
+}
+
+function getVisibleEntries() {
+  return state.entries.filter((entry) => !entry.deletedAt);
 }
 
 function copyToClipboard(text, successMessage) {
@@ -324,14 +448,25 @@ function makeId(site) {
   return `${site || "entry"}-${Date.now().toString(36)}`;
 }
 
-function getVaultPayload() {
+function getVaultPayload(options = {}) {
+  const shouldTouchUpdatedAt = options.touchUpdatedAt !== false;
   return {
     version: 1,
     createdAt: state.vaultMeta?.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    updatedAt: shouldTouchUpdatedAt
+      ? new Date().toISOString()
+      : state.vaultMeta?.updatedAt || new Date().toISOString(),
     entries: state.entries,
     settings: state.settings,
   };
+}
+
+function snapshotVaultPayload(payload = getVaultPayload()) {
+  try {
+    return structuredClone(payload);
+  } catch {
+    return JSON.parse(JSON.stringify(payload));
+  }
 }
 
 function touchActivity() {
@@ -349,6 +484,10 @@ function touchActivity() {
 function lockVaultSilently() {
   clearTimeout(state.autoLockTimer);
   clearTimeout(state.clipboardTimer);
+  clearCloudSyncTimer();
+  state.cloudCheckBusy = false;
+  state.syncBusy = false;
+  state.syncError = "";
   if (window.vault?.copyText) {
     window.vault.copyText("");
   } else {
@@ -373,6 +512,7 @@ function lockVaultSilently() {
   vaultScreen.classList.add("hidden");
   authScreen.classList.remove("hidden");
   window.vault?.lockVault?.();
+  refreshStatusText();
 }
 
 function scheduleClipboardClear() {
@@ -409,13 +549,140 @@ function syncPrimaryActionButton() {
   newEntryBtn.textContent = isSettingsOpen() ? "返回" : state.editing ? "保存" : "新增";
 }
 
+function formatStatusTime(label, value) {
+  if (!value) return `${label}：--`;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return `${label}：--`;
+  const now = new Date();
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const options = sameYear
+    ? { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }
+    : { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" };
+  return `${label}：${date.toLocaleString("zh-CN", options)}`;
+}
+
+function isLocalVaultNewerThanSync() {
+  if (!state.syncConfig?.configured) return false;
+  const localTime = Date.parse(state.vaultMeta?.updatedAt || "") || 0;
+  const syncedTime = Date.parse(state.syncConfig?.lastSyncedAt || "") || 0;
+  return Boolean(localTime && localTime > syncedTime);
+}
+
+function getSyncStatusMeta() {
+  if (state.vaultCorrupted) {
+    return { state: "error", label: "保险箱异常" };
+  }
+  if (state.syncConfig?.corrupted) {
+    return { state: "error", label: "同步配置异常" };
+  }
+  if (state.syncBusy || state.cloudCheckBusy || state.cloudSyncJob) {
+    return { state: "warn", label: "同步中" };
+  }
+  if (state.syncError) {
+    return { state: "error", label: state.syncError };
+  }
+  if (!state.unlocked) {
+    return { state: "warn", label: "未解锁" };
+  }
+  if (!state.syncConfig?.configured) {
+    return { state: "warn", label: "未配置同步" };
+  }
+  if (state.pendingCloudUpdate) {
+    return { state: "warn", label: "云端有更新" };
+  }
+  if (isLocalVaultNewerThanSync()) {
+    return { state: "warn", label: "待同步" };
+  }
+  return { state: "ok", label: "已同步" };
+}
+
+function syncTopSyncStatus() {
+  const meta = getSyncStatusMeta();
+  topSyncStatus?.setAttribute("data-sync-state", meta.state);
+  topSyncStatus?.classList.toggle("sync-pill-ok", meta.state === "ok");
+  topSyncStatus?.classList.toggle("sync-pill-warn", meta.state === "warn");
+  topSyncStatus?.classList.toggle("sync-pill-error", meta.state === "error");
+  footerStatusDot?.classList.toggle("status-dot-ok", meta.state === "ok");
+  footerStatusDot?.classList.toggle("status-dot-warn", meta.state === "warn");
+  footerStatusDot?.classList.toggle("status-dot-error", meta.state === "error");
+  if (topSyncText) topSyncText.textContent = meta.label;
+  if (lastUpdateText) {
+    lastUpdateText.textContent = state.syncConfig?.configured
+      ? formatStatusTime("上次同步", state.syncConfig?.lastSyncedAt)
+      : formatStatusTime("本地更新", state.vaultMeta?.updatedAt);
+  }
+}
+
+function setSyncBusy(isBusy) {
+  state.syncBusy = Boolean(isBusy);
+  refreshStatusText();
+}
+
+function clearSyncError() {
+  state.syncError = "";
+  refreshStatusText();
+}
+
+function setSyncError(message = "同步失败") {
+  state.syncError = message;
+  refreshStatusText();
+}
+
+function showDataKeySyncPrompt(result, options = {}) {
+  if (!result?.needsDataKey) return false;
+  const message = result.error || "同步需要数据钥匙，请到设置的数据钥匙页面输入后再试";
+  setSyncError(message);
+  showToast(message);
+  if (options.openSettings) {
+    openSettingsView();
+    setSettingsSection("data-key");
+    requestAnimationFrame(() => dataKeyInput?.focus({ preventScroll: true }));
+  }
+  return true;
+}
+
+function markSyncSucceeded(result = {}) {
+  const lastSyncedAt = result.lastSyncedAt || new Date().toISOString();
+  state.syncConfig = {
+    ...state.syncConfig,
+    lastSyncedAt,
+  };
+  clearSyncError();
+}
+
+function latestTimestampValue(currentValue, nextValue) {
+  const currentTime = Date.parse(currentValue || "") || 0;
+  const nextTime = Date.parse(nextValue || "") || 0;
+  if (currentTime > nextTime) return currentValue || "";
+  return nextValue || "";
+}
+
+function isSameSyncTarget(currentConfig = {}, nextConfig = {}) {
+  return (
+    Boolean(currentConfig.configured) === Boolean(nextConfig.configured) &&
+    String(currentConfig.serverUrl || "") === String(nextConfig.serverUrl || "") &&
+    String(currentConfig.username || "") === String(nextConfig.username || "") &&
+    String(currentConfig.remotePath || "") === String(nextConfig.remotePath || "")
+  );
+}
+
 function syncAuthSecondaryAction() {
   if (!bioBtn) return;
   bioBtn.textContent = state.vaultCorrupted || !state.hasVaultFile ? "导入备份" : "忘记密码";
 }
 
+function syncAuthBiometricAction() {
+  const canUnlock = Boolean(
+    state.hasVaultFile &&
+      !state.vaultCorrupted &&
+      state.biometricStatus.supported &&
+      state.biometricStatus.configured,
+  );
+  biometricUnlockBtn?.classList.toggle("hidden", !canUnlock);
+}
+
 function hasActiveSelection() {
-  return Boolean(state.activeId && state.entries.some((entry) => entry.id === state.activeId));
+  return Boolean(getActiveEntry());
 }
 
 function resolveDetailMode(mode) {
@@ -436,7 +703,9 @@ function syncDetailSurface() {
   state.detailMode = mode;
   state.editing = showEdit;
 
+  settingsNav?.classList.toggle("hidden", !showSettings);
   settingsView?.classList.toggle("hidden", !showSettings);
+  sidebar?.classList.toggle("settings-mode", showSettings);
   content?.classList.toggle("settings-mode", showSettings);
   content?.classList.toggle("empty-detail-mode", showWelcome);
   emptyDetailState?.classList.toggle("hidden", !showWelcome);
@@ -453,7 +722,7 @@ function syncDetailSurface() {
     detailModeLabel.textContent = showSettings
       ? "设置"
       : showEdit
-        ? "编辑条目"
+        ? "编辑记录"
         : showRead
           ? "查看详情"
           : "欢迎";
@@ -464,6 +733,9 @@ function syncDetailSurface() {
   }
 
   syncPrimaryActionButton();
+  if (showSettings) {
+    syncSettingsNavigation();
+  }
   if (showEdit) {
     siteInput.focus({ preventScroll: true });
   }
@@ -482,6 +754,33 @@ function syncSettingsModeClass() {
   syncDetailSurface();
 }
 
+function normalizeSettingsSection(section) {
+  return Object.hasOwn(SETTINGS_SECTIONS, section) ? section : "security";
+}
+
+function syncSettingsNavigation() {
+  const section = normalizeSettingsSection(state.settingsSection);
+  state.settingsSection = section;
+  const meta = SETTINGS_SECTIONS[section];
+  if (settingsSectionTitle) settingsSectionTitle.textContent = meta.title;
+  if (settingsSectionHint) settingsSectionHint.textContent = meta.hint;
+
+  settingsNav?.querySelectorAll("[data-settings-section]").forEach((button) => {
+    const active = button.dataset.settingsSection === section;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+
+  settingsView?.querySelectorAll("[data-settings-page]").forEach((page) => {
+    page.classList.toggle("hidden", page.dataset.settingsPage !== section);
+  });
+}
+
+function setSettingsSection(section) {
+  state.settingsSection = normalizeSettingsSection(section);
+  syncSettingsNavigation();
+}
+
 function resetDetailSurface() {
   state.readPasswordVisible = false;
   setDetailMode("welcome");
@@ -490,10 +789,13 @@ function resetDetailSurface() {
 function syncSettingsForm() {
   if (autoLockMinutes) autoLockMinutes.value = String(state.settings.autoLockMinutes);
   if (clipboardClearSeconds) clipboardClearSeconds.value = String(state.settings.clipboardClearSeconds);
+  if (cloudCheckMinutes) cloudCheckMinutes.value = String(state.settings.cloudCheckMinutes);
   if (passwordLengthSetting) passwordLengthSetting.value = String(state.settings.passwordLength);
   if (copyConfirmSetting) copyConfirmSetting.checked = Boolean(state.settings.copyConfirm);
   if (welcomeSetting) welcomeSetting.checked = Boolean(state.settings.welcomeOnStart);
   if (backupExportSetting) backupExportSetting.checked = Boolean(state.settings.backupBeforeExport);
+  syncSettingsNavigation();
+  syncDataKeySettings();
 }
 
 function syncRecoverySettings() {
@@ -510,6 +812,497 @@ function syncRecoverySettings() {
   }
   const questions = status.questions || [];
   if (questions[0]) recoveryQuestion1.value = questions[0];
+}
+
+function syncBiometricSettings() {
+  const status = state.biometricStatus || {};
+  const supported = Boolean(status.supported);
+  const configured = Boolean(status.configured);
+  const corrupted = Boolean(status.corrupted);
+
+  if (biometricStatusText) {
+    biometricStatusText.textContent = !supported
+      ? status.unavailableReason || "当前设备或系统不支持 Touch ID 解锁。"
+      : corrupted
+        ? "配置文件异常，请关闭后重新启用。"
+        : configured
+          ? "已启用，可在登录页使用指纹解锁。"
+          : "未启用，解锁时仍需输入主密码。";
+  }
+  if (biometricStatusPill) {
+    biometricStatusPill.textContent = configured ? "已启用" : supported ? "未启用" : "不可用";
+    biometricStatusPill.classList.toggle("is-live", configured);
+  }
+  if (biometricToggleBtn) {
+    biometricToggleBtn.disabled = !supported || !state.unlocked;
+    biometricToggleBtn.textContent = configured ? "关闭 Touch ID" : "启用 Touch ID";
+  }
+  syncAuthBiometricAction();
+}
+
+function syncDataKeySettings() {
+  const status = state.dataKeyStatus || {};
+  const supported = Boolean(status.supported);
+  const remembered = Boolean(status.remembered);
+  const sessionActive = Boolean(status.sessionActive);
+  const corrupted = Boolean(status.corrupted);
+
+  if (dataKeyStatusText) {
+    dataKeyStatusText.textContent = !supported
+      ? status.unavailableReason || "系统加密存储不可用，无法在本机记住数据钥匙。"
+      : corrupted
+        ? "本机数据钥匙配置异常，请重新保存。"
+        : remembered
+          ? sessionActive
+            ? "本机已记住，当前会话也已加载。"
+            : "本机已记住，重新解锁后会自动加载。"
+          : sessionActive
+            ? "当前会话已加载，关闭软件后会清空。"
+            : "未设置。保存后，保险箱内容将改由数据钥匙解密。";
+  }
+  if (dataKeyStatusPill) {
+    dataKeyStatusPill.textContent = remembered ? "已记住" : sessionActive ? "会话中" : "未设置";
+    dataKeyStatusPill.classList.toggle("is-live", remembered || sessionActive);
+  }
+  if (rememberDataKeySetting) {
+    rememberDataKeySetting.checked = remembered;
+    rememberDataKeySetting.disabled = !supported;
+  }
+  if (
+    dataKeyInput &&
+    (remembered || sessionActive) &&
+    (dataKeyInput.dataset.secretMasked === "true" || dataKeyInput.value === "")
+  ) {
+    setSecretMask(dataKeyInput);
+  }
+}
+
+function getWebdavFormConfig() {
+  return {
+    serverUrl: webdavServerUrl?.value.trim() || "",
+    username: webdavUsername?.value.trim() || "",
+    appPassword: getSecretInputValue(webdavAppPassword).replace(/\s+/g, ""),
+    remotePath: webdavRemotePath?.value.trim() || "/CocoDense/vault.json",
+  };
+}
+
+function syncWebdavSettingsForm() {
+  const config = state.syncConfig || {};
+  if (webdavServerUrl) webdavServerUrl.value = config.serverUrl || "https://dav.jianguoyun.com/dav/";
+  if (webdavUsername) webdavUsername.value = config.username || "";
+  if (webdavRemotePath) webdavRemotePath.value = config.remotePath || "/CocoDense/vault.json";
+  const configured = Boolean(config.configured);
+  const corrupted = Boolean(config.corrupted);
+  if (webdavAppPassword) {
+    if (configured && document.activeElement !== webdavAppPassword) {
+      setSecretMask(webdavAppPassword);
+    } else if (!configured) {
+      clearSecretMask(webdavAppPassword);
+      webdavAppPassword.value = "";
+    }
+  }
+  if (webdavStatusText) {
+    webdavStatusText.textContent = corrupted
+      ? "同步配置异常，请重新保存。"
+      : configured
+        ? "已配置。上传会覆盖坚果云，下载会覆盖本地，合并会双向合并。"
+        : "未配置。坚果云只保存加密后的保险箱文件。";
+  }
+  if (webdavStatusPill) {
+    webdavStatusPill.textContent = configured ? "已配置" : corrupted ? "异常" : "未配置";
+    webdavStatusPill.classList.toggle("is-live", configured);
+  }
+  const syncReady = Boolean(state.unlocked && configured);
+  if (uploadWebdavBtn) uploadWebdavBtn.disabled = !syncReady;
+  if (downloadWebdavBtn) downloadWebdavBtn.disabled = !syncReady;
+  if (mergeWebdavBtn) mergeWebdavBtn.disabled = !syncReady;
+}
+
+function getCloudSyncIntervalMs() {
+  const minutes = Number(state.settings.cloudCheckMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0) return 0;
+  return Math.max(60000, minutes * 60000);
+}
+
+function clearCloudSyncTimer() {
+  clearTimeout(state.cloudCheckTimer);
+  state.cloudCheckTimer = null;
+}
+
+function clearPendingCloudUpdate() {
+  state.pendingCloudUpdate = false;
+  state.pendingCloudPayload = null;
+  state.pendingCloudUpdatedAt = 0;
+}
+
+function canRunCloudSyncCheck() {
+  return Boolean(
+    state.unlocked &&
+      state.masterPassword &&
+      !state.vaultCorrupted &&
+      state.syncConfig?.configured,
+  );
+}
+
+function scheduleCloudSyncCheck() {
+  clearCloudSyncTimer();
+  if (!canRunCloudSyncCheck()) return;
+  const delay = getCloudSyncIntervalMs();
+  if (!delay) return;
+  state.cloudCheckTimer = setTimeout(async () => {
+    state.cloudCheckTimer = null;
+    await runCloudSyncCheck();
+    scheduleCloudSyncCheck();
+  }, delay);
+}
+
+async function runCloudSyncCheck() {
+  if (state.cloudCheckBusy || !canRunCloudSyncCheck()) return false;
+  state.cloudCheckBusy = true;
+  refreshStatusText();
+  try {
+    const syncConfig = state.syncConfig || {};
+    const remote = await window.vault?.peekSync?.(state.masterPassword, syncConfig);
+    if (!remote?.ok) {
+      if (showDataKeySyncPrompt(remote)) return false;
+      setSyncError(remote?.error || "同步检查失败");
+      return false;
+    }
+    if (!remote.exists) {
+      clearSyncError();
+      return false;
+    }
+
+    const remoteUpdatedAt = Date.parse(remote.updatedAt || remote.payload?.updatedAt || "") || 0;
+    const localUpdatedAt = Date.parse(state.vaultMeta?.updatedAt || "") || 0;
+    if (remoteUpdatedAt <= localUpdatedAt) {
+      clearPendingCloudUpdate();
+      if (isLocalVaultNewerThanSync() && !state.editing) {
+        clearSyncError();
+        await queueCloudSync(getVaultPayload());
+        return true;
+      }
+      if (!isLocalVaultNewerThanSync()) {
+        clearSyncError();
+      }
+      return false;
+    }
+
+    if (state.editing) {
+      state.pendingCloudUpdate = true;
+      state.pendingCloudPayload = remote.payload;
+      state.pendingCloudUpdatedAt = remoteUpdatedAt;
+      clearSyncError();
+      refreshStatusText();
+      return true;
+    }
+
+    clearPendingCloudUpdate();
+    const result = await window.vault?.downloadSync?.(state.masterPassword, syncConfig);
+    if (!result?.ok) {
+      if (showDataKeySyncPrompt(result)) return false;
+      setSyncError(result?.error || "下载失败");
+      return false;
+    }
+    if (result.vault) {
+      loadVaultPayload(result.vault, { preserveView: true });
+    }
+    markSyncSucceeded(result);
+    showToast("已从云端自动更新");
+    return true;
+  } catch {
+    setSyncError("同步检查失败");
+    return false;
+  } finally {
+    state.cloudCheckBusy = false;
+    refreshStatusText();
+  }
+}
+
+async function syncLocalMutationToCloud(payload = getVaultPayload()) {
+  if (!state.unlocked || !state.masterPassword || !state.syncConfig?.configured) return false;
+  const syncConfig = state.syncConfig || {};
+  const hasPendingRemote = Boolean(state.pendingCloudUpdate);
+
+  try {
+    if (hasPendingRemote) {
+      const result = await window.vault?.syncNow?.(state.masterPassword, payload, syncConfig);
+      if (!result?.ok) {
+        if (showDataKeySyncPrompt(result)) return false;
+        setSyncError(result?.error || "自动同步失败");
+        showToast(result?.error || "自动同步失败");
+        return false;
+      }
+      clearPendingCloudUpdate();
+      if (result.vault) {
+        loadVaultPayload(result.vault, { preserveView: true });
+      }
+      markSyncSucceeded(result);
+      return true;
+    }
+
+    const result = await window.vault?.uploadSync?.(state.masterPassword, payload, syncConfig);
+    if (!result?.ok) {
+      if (showDataKeySyncPrompt(result)) return false;
+      if (result?.needsMerge) {
+        const mergeResult = await window.vault?.syncNow?.(state.masterPassword, payload, syncConfig);
+        if (!mergeResult?.ok) {
+          if (showDataKeySyncPrompt(mergeResult)) return false;
+          setSyncError(mergeResult?.error || "自动合并失败");
+          showToast(mergeResult?.error || "自动合并失败");
+          return false;
+        }
+        if (mergeResult.vault) {
+          loadVaultPayload(mergeResult.vault, { preserveView: true });
+        }
+        markSyncSucceeded(mergeResult);
+        return true;
+      }
+      setSyncError(result?.error || "自动同步失败");
+      showToast(result?.error || "自动同步失败");
+      return false;
+    }
+    markSyncSucceeded(result);
+    return true;
+  } finally {
+    scheduleCloudSyncCheck();
+  }
+}
+
+async function forceUploadDataKeyVault(payload) {
+  if (!state.unlocked || !state.masterPassword || !state.syncConfig?.configured || !payload) return false;
+  const syncConfig = state.syncConfig || {};
+  clearPendingCloudUpdate();
+  clearSyncError();
+  setSyncBusy(true);
+  try {
+    const result = await window.vault?.uploadSync?.(state.masterPassword, payload, syncConfig, { force: true });
+    if (!result?.ok) {
+      setSyncError(result?.error || "数据钥匙已保存，但上传云端失败");
+      showToast(result?.error || "数据钥匙已保存，但上传云端失败");
+      return false;
+    }
+    markSyncSucceeded(result);
+    showToast("数据钥匙已保存并同步到云端");
+    return true;
+  } finally {
+    setSyncBusy(false);
+    scheduleCloudSyncCheck();
+  }
+}
+
+async function syncCloudAfterUnlock() {
+  if (!state.unlocked || !state.masterPassword || state.unlockSyncJob) return state.unlockSyncJob || false;
+  state.unlockSyncJob = (async () => {
+    await refreshWebdavConfig();
+    if (!state.syncConfig?.configured || state.vaultCorrupted) return false;
+    clearSyncError();
+    setSyncBusy(true);
+    try {
+      const payload = snapshotVaultPayload(getVaultPayload({ touchUpdatedAt: false }));
+      const result = await window.vault?.syncNow?.(state.masterPassword, payload, state.syncConfig);
+      if (!result?.ok) {
+        if (showDataKeySyncPrompt(result)) return false;
+        setSyncError(result?.error || "登录后同步失败");
+        showToast(result?.error || "登录后同步失败");
+        return false;
+      }
+      if (result.vault) {
+        loadVaultPayload(result.vault, { preserveView: true });
+      }
+      markSyncSucceeded(result);
+      await refreshWebdavConfig();
+      refreshStatusText();
+      showToast(result.merged ? "已同步云端最新数据" : "已完成云端同步");
+      return true;
+    } finally {
+      setSyncBusy(false);
+      scheduleCloudSyncCheck();
+      state.unlockSyncJob = null;
+    }
+  })();
+  return state.unlockSyncJob;
+}
+
+async function flushQueuedCloudSync() {
+  let lastResult = false;
+  while (state.cloudSyncQueuedPayload) {
+    const payload = state.cloudSyncQueuedPayload;
+    state.cloudSyncQueuedPayload = null;
+    lastResult = await syncLocalMutationToCloud(payload);
+  }
+  return lastResult;
+}
+
+function queueCloudSync(payload = getVaultPayload()) {
+  if (!state.unlocked || !state.masterPassword || !state.syncConfig?.configured) return Promise.resolve(false);
+  state.cloudSyncQueuedPayload = snapshotVaultPayload(payload);
+  if (state.cloudSyncJob) return state.cloudSyncJob;
+  state.cloudSyncJob = flushQueuedCloudSync().finally(() => {
+    state.cloudSyncJob = null;
+    state.cloudSyncQueuedPayload = null;
+    refreshStatusText();
+  });
+  refreshStatusText();
+  return state.cloudSyncJob;
+}
+
+async function refreshWebdavConfig() {
+  const result = await window.vault?.getSyncConfig?.();
+  const config = result?.config || {};
+  const nextConfig = {
+    configured: Boolean(config.configured),
+    corrupted: Boolean(config.corrupted),
+    serverUrl: config.serverUrl || "",
+    username: config.username || "",
+    remotePath: config.remotePath || "/CocoDense/vault.json",
+    updatedAt: config.updatedAt || "",
+    lastSyncedAt: config.lastSyncedAt || "",
+  };
+  if (isSameSyncTarget(state.syncConfig, nextConfig)) {
+    nextConfig.lastSyncedAt = latestTimestampValue(state.syncConfig?.lastSyncedAt, nextConfig.lastSyncedAt);
+  }
+  state.syncConfig = {
+    ...nextConfig,
+  };
+  syncWebdavSettingsForm();
+  scheduleCloudSyncCheck();
+  refreshStatusText();
+  return state.syncConfig;
+}
+
+async function saveWebdavConfig() {
+  const config = getWebdavFormConfig();
+  saveWebdavBtn.disabled = true;
+  saveWebdavBtn.textContent = "保存中";
+  const result = await window.vault?.saveSyncConfig?.(config);
+  saveWebdavBtn.disabled = false;
+  saveWebdavBtn.textContent = "保存配置";
+  if (!result?.ok) {
+    showToast(result?.error || "保存同步配置失败");
+    return false;
+  }
+  clearSyncError();
+  await refreshWebdavConfig();
+  showToast("同步配置已保存");
+  touchActivity();
+  return true;
+}
+
+async function testWebdavConnection() {
+  const config = getWebdavFormConfig();
+  testWebdavBtn.disabled = true;
+  testWebdavBtn.textContent = "测试中";
+  const result = await window.vault?.testSyncConfig?.(config);
+  testWebdavBtn.disabled = false;
+  testWebdavBtn.textContent = "测试连接";
+  if (result?.ok && config.appPassword) {
+    await window.vault?.saveSyncConfig?.(config);
+    await refreshWebdavConfig();
+  }
+  if (result?.ok) clearSyncError();
+  showToast(result?.ok ? "WebDAV 连接正常" : result?.error || "连接失败");
+  touchActivity();
+}
+
+async function uploadWebdavNow() {
+  if (!state.unlocked || !state.masterPassword) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  const syncConfig = getWebdavFormConfig();
+  clearSyncError();
+  setSyncBusy(true);
+  uploadWebdavBtn.disabled = true;
+  uploadWebdavBtn.textContent = "上传中";
+  const result = await window.vault?.uploadSync?.(state.masterPassword, getVaultPayload(), syncConfig);
+  uploadWebdavBtn.disabled = false;
+  uploadWebdavBtn.textContent = "上传到坚果云";
+  if (!result?.ok) {
+    setSyncBusy(false);
+    if (showDataKeySyncPrompt(result, { openSettings: true })) return;
+    if (result?.needsMerge) {
+      state.pendingCloudUpdate = true;
+      state.pendingCloudUpdatedAt = Date.parse(result.remoteUpdatedAt || "") || Date.now();
+      setSyncError(result.error || "云端有更新，请先双向合并");
+      showToast(result.error || "云端有更新，请先双向合并");
+      return;
+    }
+    setSyncError(result?.error || "上传失败");
+    showToast(result?.error || "上传失败");
+    return;
+  }
+  if (result.vault) {
+    loadVaultPayload(result.vault);
+  }
+  markSyncSucceeded(result);
+  await window.vault?.saveSyncConfig?.(syncConfig);
+  await refreshWebdavConfig();
+  setSyncBusy(false);
+  showToast("已上传到坚果云");
+  touchActivity();
+}
+
+async function downloadWebdavNow() {
+  if (!state.unlocked || !state.masterPassword) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  const syncConfig = getWebdavFormConfig();
+  clearSyncError();
+  setSyncBusy(true);
+  downloadWebdavBtn.disabled = true;
+  downloadWebdavBtn.textContent = "下载中";
+  const result = await window.vault?.downloadSync?.(state.masterPassword, syncConfig);
+  downloadWebdavBtn.disabled = false;
+  downloadWebdavBtn.textContent = "从坚果云下载";
+  if (!result?.ok) {
+    setSyncBusy(false);
+    if (showDataKeySyncPrompt(result, { openSettings: true })) return;
+    setSyncError(result?.error || "下载失败");
+    showToast(result?.error || "下载失败");
+    return;
+  }
+  if (result.vault) {
+    loadVaultPayload(result.vault);
+  }
+  markSyncSucceeded(result);
+  await window.vault?.saveSyncConfig?.(syncConfig);
+  await refreshWebdavConfig();
+  setSyncBusy(false);
+  showToast("已从坚果云下载");
+  touchActivity();
+}
+
+async function mergeWebdavNow() {
+  if (!state.unlocked || !state.masterPassword) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  const syncConfig = getWebdavFormConfig();
+  clearSyncError();
+  setSyncBusy(true);
+  mergeWebdavBtn.disabled = true;
+  mergeWebdavBtn.textContent = "合并中";
+  const result = await window.vault?.syncNow?.(state.masterPassword, getVaultPayload(), syncConfig);
+  mergeWebdavBtn.disabled = false;
+  mergeWebdavBtn.textContent = "双向合并";
+  if (!result?.ok) {
+    setSyncBusy(false);
+    if (showDataKeySyncPrompt(result, { openSettings: true })) return;
+    setSyncError(result?.error || "合并失败");
+    showToast(result?.error || "合并失败");
+    return;
+  }
+  if (result.vault) {
+    loadVaultPayload(result.vault);
+  }
+  markSyncSucceeded(result);
+  await window.vault?.saveSyncConfig?.(syncConfig);
+  await refreshWebdavConfig();
+  setSyncBusy(false);
+  showToast(result.merged ? "已合并并同步" : "已合并到坚果云");
+  touchActivity();
 }
 
 function syncDetailMode() {
@@ -683,6 +1476,8 @@ function showEntryContextMenu(event, entry) {
 }
 
 async function persistContextEntry(message = "已更新") {
+  const target = state.entries.find((item) => item.id === (state.contextEntryId || state.activeId));
+  if (target) target.updatedAt = new Date().toISOString();
   renderEntries();
   const entry = getActiveEntry();
   if (entry) {
@@ -731,6 +1526,7 @@ async function commitInlineRename(input, options = {}) {
   }
 
   entry.site = nextName;
+  entry.updatedAt = new Date().toISOString();
   await persistContextEntry("名称已修改");
 }
 
@@ -757,6 +1553,128 @@ async function refreshRecoveryStatus() {
   };
   syncRecoverySettings();
   return state.recoveryStatus;
+}
+
+async function refreshBiometricStatus() {
+  const status = await window.vault?.getBiometricStatus?.();
+  state.biometricStatus = {
+    supported: Boolean(status?.supported),
+    configured: Boolean(status?.configured),
+    corrupted: Boolean(status?.corrupted),
+    updatedAt: status?.updatedAt || "",
+    unavailableReason: status?.unavailableReason || "",
+  };
+  syncBiometricSettings();
+  return state.biometricStatus;
+}
+
+async function refreshDataKeyStatus() {
+  const status = await window.vault?.getDataKeyStatus?.();
+  state.dataKeyStatus = {
+    supported: Boolean(status?.supported),
+    remembered: Boolean(status?.remembered),
+    sessionActive: Boolean(status?.sessionActive),
+    corrupted: Boolean(status?.corrupted),
+    updatedAt: status?.updatedAt || "",
+    unavailableReason: status?.unavailableReason || "",
+  };
+  syncDataKeySettings();
+  return state.dataKeyStatus;
+}
+
+async function saveDataKeySettings() {
+  if (!state.unlocked || !state.masterPassword) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  const dataKey = getSecretInputValue(dataKeyInput);
+  if (!dataKey) {
+    showToast(dataKeyInput?.dataset.secretMasked === "true" ? "如需修改数据钥匙，请输入新的数据钥匙" : "请输入数据钥匙");
+    dataKeyInput?.focus();
+    return;
+  }
+
+  saveDataKeyBtn.disabled = true;
+  saveDataKeyBtn.textContent = "正在保存";
+  const result = await window.vault?.saveDataKey?.(dataKey, rememberDataKeySetting?.checked);
+  saveDataKeyBtn.disabled = false;
+  saveDataKeyBtn.textContent = "保存数据钥匙";
+  if (!result?.ok) {
+    showToast(result?.error || "保存数据钥匙失败");
+    return;
+  }
+  state.dataKeyStatus = {
+    supported: Boolean(result.status?.supported),
+    remembered: Boolean(result.status?.remembered),
+    sessionActive: Boolean(result.status?.sessionActive),
+    corrupted: Boolean(result.status?.corrupted),
+    updatedAt: result.status?.updatedAt || "",
+    unavailableReason: result.status?.unavailableReason || "",
+  };
+  if (result.vault) {
+    loadVaultPayload(result.vault, { preserveView: true });
+  }
+  syncDataKeySettings();
+  setSecretMask(dataKeyInput);
+  if (result.vault && state.syncConfig?.configured) {
+    await forceUploadDataKeyVault(result.vault);
+  } else {
+    showToast(state.dataKeyStatus.remembered ? "数据钥匙已保存到本机" : "数据钥匙已在当前会话加载");
+  }
+  touchActivity();
+}
+
+async function generateDataKeySettings() {
+  if (!state.unlocked || !state.masterPassword) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  const result = await window.vault?.generateDataKey?.();
+  if (!result?.ok) {
+    showToast(result?.error || "生成数据钥匙失败");
+    return;
+  }
+  if (dataKeyInput) {
+    clearSecretMask(dataKeyInput);
+    dataKeyInput.value = result.dataKey || "";
+  }
+  state.dataKeyStatus = {
+    supported: Boolean(result.status?.supported),
+    remembered: Boolean(result.status?.remembered),
+    sessionActive: Boolean(result.status?.sessionActive),
+    corrupted: Boolean(result.status?.corrupted),
+    updatedAt: result.status?.updatedAt || "",
+    unavailableReason: result.status?.unavailableReason || "",
+  };
+  syncDataKeySettings();
+  showToast("已生成数据钥匙");
+  touchActivity();
+}
+
+async function clearDataKeySettings() {
+  const result = await window.vault?.clearDataKey?.();
+  if (!result?.ok) {
+    showToast(result?.error || "清除数据钥匙失败");
+    return;
+  }
+  if (dataKeyInput) {
+    clearSecretMask(dataKeyInput);
+    dataKeyInput.value = "";
+  }
+  state.dataKeyStatus = {
+    supported: Boolean(result.status?.supported),
+    remembered: Boolean(result.status?.remembered),
+    sessionActive: Boolean(result.status?.sessionActive),
+    corrupted: Boolean(result.status?.corrupted),
+    updatedAt: result.status?.updatedAt || "",
+    unavailableReason: result.status?.unavailableReason || "",
+  };
+  syncDataKeySettings();
+  showToast("已清除数据钥匙，请重新解锁");
+  if (state.unlocked) {
+    lockVaultSilently();
+  }
+  touchActivity();
 }
 
 async function saveRecoverySettings(event) {
@@ -820,6 +1738,66 @@ async function recoverAndUnlock(event) {
   window.vault?.showVault?.();
   loadVaultPayload(result.vault);
   showToast("已通过安全问题解锁");
+  syncCloudAfterUnlock();
+  touchActivity();
+}
+
+async function unlockWithBiometric() {
+  if (state.vaultCorrupted) {
+    showToast("本地保险箱损坏，请先导入备份");
+    return;
+  }
+
+  biometricUnlockBtn.disabled = true;
+  biometricUnlockBtn.textContent = "验证中";
+  const result = await window.vault?.unlockWithBiometric?.();
+  biometricUnlockBtn.disabled = false;
+  biometricUnlockBtn.textContent = "指纹解锁";
+  if (!result?.ok) {
+    showToast(result?.error || "指纹解锁失败");
+    return;
+  }
+
+  state.unlocked = true;
+  state.masterPassword = result.masterPassword || state.masterPassword;
+  window.vault?.showVault?.();
+  loadVaultPayload(result.vault);
+  showToast("已通过 Touch ID 解锁");
+  syncCloudAfterUnlock();
+  touchActivity();
+}
+
+async function toggleBiometricUnlock() {
+  if (!state.unlocked || !state.masterPassword) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  if (!state.biometricStatus.supported) {
+    showToast(state.biometricStatus.unavailableReason || "当前设备不支持 Touch ID");
+    return;
+  }
+
+  biometricToggleBtn.disabled = true;
+  biometricToggleBtn.textContent = state.biometricStatus.configured ? "关闭中" : "启用中";
+  const result = state.biometricStatus.configured
+    ? await window.vault?.disableBiometric?.()
+    : await window.vault?.enableBiometric?.(state.masterPassword);
+  biometricToggleBtn.disabled = false;
+  if (!result?.ok) {
+    biometricToggleBtn.textContent = state.biometricStatus.configured ? "关闭 Touch ID" : "启用 Touch ID";
+    showToast(result?.error || "Touch ID 设置失败");
+    return;
+  }
+
+  state.biometricStatus = {
+    supported: Boolean(result.status?.supported),
+    configured: Boolean(result.status?.configured),
+    corrupted: Boolean(result.status?.corrupted),
+    updatedAt: result.status?.updatedAt || "",
+    unavailableReason: result.status?.unavailableReason || "",
+  };
+  syncBiometricSettings();
+  showToast(state.biometricStatus.configured ? "已启用 Touch ID" : "已关闭 Touch ID");
   touchActivity();
 }
 async function importVaultFromFile() {
@@ -834,7 +1812,8 @@ async function importVaultFromFile() {
     return;
   }
   showToast("正在选择加密文件");
-  const result = await window.vault?.importVaultFile?.(password);
+  const importDataKey = getSecretInputValue(dataKeyInput) || "";
+  const result = await window.vault?.importVaultFile?.(password, importDataKey);
   if (result?.ok) {
     state.unlocked = true;
     state.masterPassword = password;
@@ -855,18 +1834,36 @@ async function persistVault() {
     showToast("请先解锁保险箱");
     return false;
   }
-  const payload = getVaultPayload();
-  const result = await window.vault?.saveVault?.(state.masterPassword, payload);
-  if (!result?.ok) {
-    showToast("保存失败");
-    return false;
-  }
-  state.vaultMeta = {
-    createdAt: payload.createdAt,
-    updatedAt: payload.updatedAt,
-  };
-  state.hasVaultFile = true;
-  return true;
+  state.persistQueuedPayload = snapshotVaultPayload(getVaultPayload());
+  if (state.persistJob) return state.persistJob;
+  state.persistJob = (async () => {
+    let lastResult = false;
+    try {
+      while (state.persistQueuedPayload) {
+        const payload = state.persistQueuedPayload;
+        state.persistQueuedPayload = null;
+        const result = await window.vault?.saveVault?.(state.masterPassword, payload);
+        if (!result?.ok) {
+          showToast("保存失败");
+          lastResult = false;
+          continue;
+        }
+        state.vaultMeta = {
+          createdAt: payload.createdAt,
+          updatedAt: payload.updatedAt,
+        };
+        state.hasVaultFile = true;
+        refreshStatusText();
+        await queueCloudSync(payload);
+        lastResult = true;
+      }
+      return lastResult;
+    } finally {
+      state.persistJob = null;
+      state.persistQueuedPayload = null;
+    }
+  })();
+  return state.persistJob;
 }
 
 async function changeMasterPassword(event) {
@@ -918,21 +1915,41 @@ async function changeMasterPassword(event) {
   touchActivity();
 }
 
-function loadVaultPayload(payload) {
-  resetDetailSurface();
+function loadVaultPayload(payload, options = {}) {
+  const preserveView = Boolean(options.preserveView);
+  const previousMode = state.detailMode;
+  const previousActiveId = state.activeId;
+  const previousSettingsSection = state.settingsSection;
+  clearPendingCloudUpdate();
+  state.syncError = "";
+  if (!preserveView) {
+    resetDetailSurface();
+  }
   state.entries = Array.isArray(payload?.entries) ? payload.entries.map(normalizeEntry) : [];
   state.settings = normalizeSettings(payload?.settings);
   state.vaultMeta = {
     createdAt: payload?.createdAt || new Date().toISOString(),
     updatedAt: payload?.updatedAt || new Date().toISOString(),
   };
-  state.activeId = "";
+  const activeEntryStillExists = state.entries.some((entry) => entry.id === previousActiveId && !entry.deletedAt);
+  state.activeId = preserveView && activeEntryStillExists ? previousActiveId : "";
   applyPriority("green");
   syncSettingsForm();
   renderEntries();
-  clearForm();
+  if (preserveView && previousMode === "settings") {
+    setDetailMode("settings");
+    setSettingsSection(previousSettingsSection);
+  } else if (preserveView && state.activeId) {
+    fillForm(getActiveEntry());
+    setDetailMode(previousMode === "edit" ? "edit" : "read");
+  } else {
+    clearForm();
+  }
   refreshStatusText();
   refreshRecoveryStatus();
+  refreshBiometricStatus();
+  refreshDataKeyStatus();
+  refreshWebdavConfig();
   touchActivity();
 }
 
@@ -941,6 +1958,9 @@ async function initAuthState() {
   state.hasVaultFile = Boolean(status?.hasVault);
   state.vaultCorrupted = Boolean(status?.corrupted);
   await refreshRecoveryStatus();
+  await refreshBiometricStatus();
+  await refreshDataKeyStatus();
+  await refreshWebdavConfig();
   if (state.vaultCorrupted) {
     unlockPrimaryBtn.textContent = "无法解锁";
     authHelper.textContent = "本地保险箱文件可能损坏，请从备份文件恢复。";
@@ -956,7 +1976,7 @@ async function initAuthState() {
 
 function renderEntries() {
   const query = searchInput.value.trim().toLowerCase();
-  const filtered = sortEntries(state.entries.filter((entry) => {
+  const filtered = sortEntries(getVisibleEntries().filter((entry) => {
     if (state.activeFilter === "收藏" && !entry.favorite) return false;
     if (state.activeFilter === "最近" && !entry.lastUsedAt) return false;
     if (!query) return true;
@@ -1175,14 +2195,19 @@ function renderReadView(entry) {
 }
 
 function refreshStatusText() {
-  const count = state.entries.length;
+  const count = getVisibleEntries().length;
+  syncTopSyncStatus();
   if (!state.unlocked) {
     syncText.textContent = "等待解锁保险箱";
     return;
   }
+  if (state.pendingCloudUpdate) {
+    syncText.textContent = "云端有更新，保存或退出编辑后会处理";
+    return;
+  }
   syncText.textContent = count
-    ? `已加载 ${count} 个条目，本地加密 vault 已解锁`
-    : "当前没有条目，可直接新增";
+    ? `已加载 ${count} 条密码记录，本地加密 vault 已解锁`
+    : "当前没有密码记录，可直接新增";
 }
 
 function syncReadPasswordToggle() {
@@ -1206,12 +2231,19 @@ function setEditing(nextEditing) {
     return;
   }
   setDetailMode(hasActiveSelection() ? "read" : "welcome");
+  if (state.pendingCloudUpdate) {
+    runCloudSyncCheck().finally(scheduleCloudSyncCheck);
+    return;
+  }
+  scheduleCloudSyncCheck();
 }
 
 function openSettingsView() {
-  renderEntries();
   setDetailMode("settings");
+  setSettingsSection(state.settingsSection || "security");
   syncSettingsForm();
+  refreshDataKeyStatus();
+  refreshWebdavConfig();
 }
 
 function closeSettingsView() {
@@ -1223,12 +2255,14 @@ function closeSettingsView() {
     renderEntries();
     clearForm();
   }
+  scheduleCloudSyncCheck();
 }
 
 async function saveSettings() {
   state.settings = normalizeSettings({
     autoLockMinutes: autoLockMinutes?.value,
     clipboardClearSeconds: clipboardClearSeconds?.value,
+    cloudCheckMinutes: cloudCheckMinutes?.value,
     passwordLength: passwordLengthSetting?.value,
     copyConfirm: copyConfirmSetting?.checked,
     welcomeOnStart: welcomeSetting?.checked,
@@ -1237,6 +2271,7 @@ async function saveSettings() {
   syncSettingsForm();
   touchActivity();
   await refreshVaultAfterMutation("设置已保存");
+  scheduleCloudSyncCheck();
 }
 
 function generateStrongPassword(length = 18) {
@@ -1265,6 +2300,8 @@ async function upsertEntry() {
     favorite: getActiveEntry()?.favorite || false,
     pinned: getActiveEntry()?.pinned || pinnedToggle?.getAttribute("aria-pressed") === "true",
     priority: normalizePriority(state.activePriority),
+    createdAt: getActiveEntry()?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
     lastUsedAt: getActiveEntry()?.lastUsedAt || new Date().toISOString(),
     status: "已同步",
   };
@@ -1280,7 +2317,7 @@ async function upsertEntry() {
   renderEntries();
   setActiveEntry(nextEntry.id);
   setDetailMode("read");
-  await refreshVaultAfterMutation("条目已保存");
+  await refreshVaultAfterMutation("密码已保存");
 }
 
 unlockForm.addEventListener("submit", async (event) => {
@@ -1308,6 +2345,7 @@ unlockForm.addEventListener("submit", async (event) => {
   window.vault?.showVault?.();
   loadVaultPayload(result.vault);
   showToast(result.needsSetup ? "已创建保险箱" : "已解锁保险箱");
+  syncCloudAfterUnlock();
   touchActivity();
 });
 
@@ -1337,6 +2375,8 @@ bioBtn.addEventListener("click", () => {
   openForgotPasswordModal();
 });
 
+biometricUnlockBtn?.addEventListener("click", unlockWithBiometric);
+
 newEntryBtn.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -1345,15 +2385,17 @@ newEntryBtn.addEventListener("click", (event) => {
 
 sidebar?.addEventListener("click", (event) => {
   if (event.target.closest("button, input, textarea, select, label, .vault-item")) return;
-  if (isSettingsOpen()) {
-    closeSettingsView();
-    clearForm();
-    touchActivity();
-    return;
-  }
+  if (isSettingsOpen()) return;
   if (!state.activeId && state.detailMode === "welcome") return;
   clearForm();
   setEditing(false);
+  touchActivity();
+});
+
+settingsNav?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-settings-section]");
+  if (!button) return;
+  setSettingsSection(button.dataset.settingsSection);
   touchActivity();
 });
 
@@ -1375,7 +2417,11 @@ editEntryBtn.addEventListener("click", () => {
 });
 
 settingsBtn?.addEventListener("click", () => {
-  openSettingsView();
+  if (isSettingsOpen()) {
+    closeSettingsView();
+  } else {
+    openSettingsView();
+  }
   refreshRecoveryStatus();
   touchActivity();
 });
@@ -1392,8 +2438,9 @@ cancelEditBtn.addEventListener("click", () => {
 
 favoriteEntryBtn.addEventListener("click", async () => {
   const entry = getActiveEntry();
-  if (!entry) return showToast("当前没有条目");
+  if (!entry) return showToast("当前没有可查看的记录");
   entry.favorite = !entry.favorite;
+  entry.updatedAt = new Date().toISOString();
   renderEntries();
   renderReadView(entry);
   if (await persistVault()) {
@@ -1425,6 +2472,19 @@ changePasswordModal?.addEventListener("click", (event) => {
   if (event.target === changePasswordModal) closeChangePasswordModal();
 });
 
+generateDataKeyBtn?.addEventListener("click", generateDataKeySettings);
+saveDataKeyBtn?.addEventListener("click", saveDataKeySettings);
+clearDataKeyBtn?.addEventListener("click", clearDataKeySettings);
+dataKeyInput?.addEventListener("focus", () => {
+  clearSecretMask(dataKeyInput);
+});
+dataKeyInput?.addEventListener("blur", () => {
+  const hasDataKey = Boolean(state.dataKeyStatus?.remembered || state.dataKeyStatus?.sessionActive);
+  if (hasDataKey && !dataKeyInput.value.trim()) {
+    setSecretMask(dataKeyInput);
+  }
+});
+
 openRecoverySettingsBtn?.addEventListener("click", openRecoverySettingsModal);
 clearRecoveryAnswersBtn?.addEventListener("click", () => {
   recoveryAnswer1.value = "";
@@ -1447,7 +2507,7 @@ openUrlBtn?.addEventListener("click", async () => {
   const entry = getActiveEntry();
   const targetUrl = normalizeUrl(entry?.url);
   if (!targetUrl) {
-    showToast("当前条目没有网址");
+    showToast("当前记录没有网址");
     return;
   }
   const result = await window.vault?.openExternal?.(targetUrl);
@@ -1482,17 +2542,22 @@ syncBtn?.addEventListener("click", async () => {
     showToast(createdBackup ? "已备份并导出加密文件" : "已导出加密文件");
     touchActivity();
   } else if (!result?.canceled) {
-    showToast("导出失败");
+    showToast(result?.error || "导出失败");
   }
 });
 
 clearAllEntriesBtn?.addEventListener("click", () => {
-  if (!state.entries.length) {
+  if (!getVisibleEntries().length) {
     showToast("当前没有密码可清空");
     return;
   }
   confirmWithin("clear-all-entries", "再次点击清空全部密码", async () => {
-    state.entries = [];
+    const now = new Date().toISOString();
+    state.entries = state.entries.map((entry) => ({
+      ...entry,
+      deletedAt: entry.deletedAt || now,
+      updatedAt: now,
+    }));
     state.activeId = "";
     state.editTags = [];
     state.readPasswordVisible = false;
@@ -1508,20 +2573,57 @@ clearAllEntriesBtn?.addEventListener("click", () => {
   });
 });
 
+biometricToggleBtn?.addEventListener("click", () => {
+  toggleBiometricUnlock();
+});
+
+saveWebdavBtn?.addEventListener("click", () => {
+  saveWebdavConfig();
+});
+
+testWebdavBtn?.addEventListener("click", () => {
+  testWebdavConnection();
+});
+webdavAppPassword?.addEventListener("focus", () => {
+  clearSecretMask(webdavAppPassword);
+});
+webdavAppPassword?.addEventListener("blur", () => {
+  if (state.syncConfig?.configured && !webdavAppPassword.value.trim()) {
+    setSecretMask(webdavAppPassword);
+  }
+});
+
+uploadWebdavBtn?.addEventListener("click", () => {
+  uploadWebdavNow();
+});
+
+downloadWebdavBtn?.addEventListener("click", () => {
+  downloadWebdavNow();
+});
+
+mergeWebdavBtn?.addEventListener("click", () => {
+  mergeWebdavNow();
+});
+
 deleteEntryBtn.addEventListener("click", () => {
-  if (!state.activeId) return showToast("当前没有可删除的条目");
+  if (!state.activeId) return showToast("当前没有可删除的记录");
   const entry = getActiveEntry();
-  const deleteMessage = "再次点击删除「" + (entry?.site || "当前条目") + "」";
-  confirmWithin("delete-" + state.activeId, deleteMessage, () => {
-    state.entries = state.entries.filter((item) => item.id !== state.activeId);
-    state.activeId = state.entries[0]?.id ?? "";
+  const deleteMessage = "再次点击删除「" + (entry?.site || "当前记录") + "」";
+  confirmWithin("delete-" + state.activeId, deleteMessage, async () => {
+    const now = new Date().toISOString();
+    state.entries = state.entries.map((item) =>
+      item.id === state.activeId ? { ...item, deletedAt: now, updatedAt: now } : item,
+    );
+    state.activeId = getVisibleEntries()[0]?.id ?? "";
     renderEntries();
     if (state.activeId) {
       fillForm(getActiveEntry());
     } else {
       clearForm();
     }
-    persistVault().then((ok) => ok && showToast("已删除")).catch(() => showToast("保存失败"));
+    if (await persistVault()) {
+      showToast("已删除");
+    }
     touchActivity();
   });
 });
@@ -1559,15 +2661,16 @@ priorityPicker?.addEventListener("click", (event) => {
   touchActivity();
 });
 
-pinnedToggle?.addEventListener("click", () => {
+pinnedToggle?.addEventListener("click", async () => {
   const nextPinned = pinnedToggle.getAttribute("aria-pressed") !== "true";
   pinnedToggle.setAttribute("aria-pressed", String(nextPinned));
   pinnedToggle.querySelector("span:last-child").textContent = nextPinned ? "已置顶" : "不置顶";
   const entry = getActiveEntry();
   if (entry) {
     entry.pinned = nextPinned;
+    entry.updatedAt = new Date().toISOString();
     renderEntries();
-    persistVault().catch(() => showToast("保存失败"));
+    await persistVault();
   }
   touchActivity();
 });
@@ -1635,11 +2738,12 @@ document.querySelectorAll(".chip").forEach((chip) => {
   });
 });
 
-[autoLockMinutes, clipboardClearSeconds, passwordLengthSetting, copyConfirmSetting, welcomeSetting, backupExportSetting].forEach((node) => {
+[autoLockMinutes, clipboardClearSeconds, cloudCheckMinutes, passwordLengthSetting, copyConfirmSetting, welcomeSetting, backupExportSetting].forEach((node) => {
   node?.addEventListener("change", async () => {
     state.settings = normalizeSettings({
       autoLockMinutes: autoLockMinutes?.value,
       clipboardClearSeconds: clipboardClearSeconds?.value,
+      cloudCheckMinutes: cloudCheckMinutes?.value,
       passwordLength: passwordLengthSetting?.value,
       copyConfirm: copyConfirmSetting?.checked,
       welcomeOnStart: welcomeSetting?.checked,
@@ -1647,6 +2751,7 @@ document.querySelectorAll(".chip").forEach((chip) => {
     });
     syncSettingsForm();
     await refreshVaultAfterMutation("设置已保存");
+    scheduleCloudSyncCheck();
     touchActivity();
   });
 });
@@ -1740,14 +2845,35 @@ function showMainVault(payload) {
 window.vault?.onShowVault?.(showMainVault);
 
 window.vault?.onClearAuth?.(() => {
+  clearCloudSyncTimer();
   closeChangePasswordModal();
   clearSensitiveInputs();
   refreshRecoveryStatus();
+  refreshDataKeyStatus();
 });
 
 window.vault?.onStatus?.((status) => {
   state.hasVaultFile = Boolean(status?.hasVault);
   state.vaultCorrupted = Boolean(status?.corrupted);
+  if (status?.biometric) {
+    state.biometricStatus = {
+      supported: Boolean(status.biometric.supported),
+      configured: Boolean(status.biometric.configured),
+      corrupted: Boolean(status.biometric.corrupted),
+      updatedAt: status.biometric.updatedAt || "",
+      unavailableReason: status.biometric.unavailableReason || "",
+    };
+  }
+  if (status?.dataKey) {
+    state.dataKeyStatus = {
+      supported: Boolean(status.dataKey.supported),
+      remembered: Boolean(status.dataKey.remembered),
+      sessionActive: Boolean(status.dataKey.sessionActive),
+      corrupted: Boolean(status.dataKey.corrupted),
+      updatedAt: status.dataKey.updatedAt || "",
+      unavailableReason: status.dataKey.unavailableReason || "",
+    };
+  }
   updateUnlockCooldown(status?.lockedUntil);
   if (state.vaultCorrupted) {
     unlockPrimaryBtn.textContent = "无法解锁";
@@ -1759,6 +2885,8 @@ window.vault?.onStatus?.((status) => {
       : "首次输入主密码会创建新的加密保险箱。";
   }
   syncAuthSecondaryAction();
+  syncBiometricSettings();
+  syncDataKeySettings();
   refreshStatusText();
   refreshRecoveryStatus();
   syncDetailSurface();
@@ -1768,12 +2896,3 @@ queueMicrotask(() => {
   initAuthState();
   syncDetailSurface();
 });
-
-
-
-
-
-
-
-
-
