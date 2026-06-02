@@ -19,102 +19,157 @@
   <body class="auth-mode">
     <main class="app-shell">
       <section class="auth-screen card" id="authScreen" aria-label="解锁界面">
-        <div class="traffic-lights auth-traffic-lights">
-          <button class="traffic-dot close-dot" type="button" aria-label="关闭窗口" data-window-action="close"></button>
-          <button class="traffic-dot minimize-dot" type="button" aria-label="最小化窗口" data-window-action="minimize"></button>
-          <button class="traffic-dot zoom-dot" type="button" aria-label="最大化窗口" data-window-action="maximize"></button>
-        </div>
+        <div class="auth-panel">
+          <div class="traffic-lights auth-traffic-lights">
+            <button class="traffic-dot close-dot" type="button" aria-label="关闭窗口" data-window-action="close"></button>
+            <button class="traffic-dot minimize-dot" type="button" aria-label="最小化窗口" data-window-action="minimize"></button>
+            <button class="traffic-dot zoom-dot" type="button" aria-label="最大化窗口" data-window-action="maximize"></button>
+          </div>
 
-        <div class="auth-top">
-          <div>
-            <p class="eyebrow">Coco Dense</p>
-            <h1>密码保险箱</h1>
+          <div class="auth-top">
+            <div>
+              <p class="eyebrow">Coco Dense</p>
+              <h1>密码保险箱</h1>
+            </div>
+            <div class="auth-mark" aria-label="锁定状态">
+              <svg class="mark-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M8.5 10V8.2a3.5 3.5 0 0 1 7 0V10"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+                <rect
+                  x="5.5"
+                  y="10"
+                  width="13"
+                  height="9.5"
+                  rx="2.8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                />
+                <circle cx="12" cy="14.5" r="1.2" fill="currentColor" />
+              </svg>
+            </div>
           </div>
-          <div class="auth-mark" aria-label="锁定状态">
-            <svg class="mark-icon" viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M8.5 10V8.2a3.5 3.5 0 0 1 7 0V10"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-              />
-              <rect
-                x="5.5"
-                y="10"
-                width="13"
-                height="9.5"
-                rx="2.8"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.8"
-              />
-              <circle cx="12" cy="14.5" r="1.2" fill="currentColor" />
-            </svg>
-          </div>
-        </div>
 
-        <form class="auth-form" id="unlockForm">
-          <label for="masterPassword">主密码</label>
-          <div class="input-row">
-            <input
-              id="masterPassword"
-              type="password"
-              placeholder="请输入主密码"
-              autocomplete="current-password"
-            />
-            <button
-              class="password-toggle"
-              type="button"
-              id="togglePassword"
-              aria-label="显示主密码"
-              aria-pressed="false"
-            >
-              <svg class="toggle-icon toggle-icon-show" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linejoin="round"
+          <form class="auth-form" id="unlockForm">
+            <label for="masterPassword">主密码</label>
+            <div class="input-row">
+              <input
+                id="masterPassword"
+                type="password"
+                placeholder="请输入主密码"
+                autocomplete="current-password"
+              />
+              <button
+                class="password-toggle"
+                type="button"
+                id="togglePassword"
+                aria-label="显示主密码"
+                aria-pressed="false"
+              >
+                <svg class="toggle-icon toggle-icon-show" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linejoin="round"
+                  />
+                  <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7" />
+                </svg>
+                <svg class="toggle-icon toggle-icon-hide hidden" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                  <path
+                    d="M10.5 10.5A3.4 3.4 0 0 0 9.5 12a2.5 2.5 0 1 0 4 2"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  />
+                  <path
+                    d="M2.5 12s3.4-6.5 9.5-6.5c1.3 0 2.5.2 3.6.6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  />
+                  <path
+                    d="M21.5 12s-2 3.7-5.6 5.6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div class="auth-data-key hidden" id="authDataKeyField">
+              <label for="authDataKeyInput">数据钥匙</label>
+              <div class="input-row">
+                <input
+                  id="authDataKeyInput"
+                  type="password"
+                  placeholder="请输入数据钥匙"
+                  autocomplete="off"
                 />
-                <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7" />
-              </svg>
-              <svg class="toggle-icon toggle-icon-hide hidden" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
-                <path
-                  d="M10.5 10.5A3.4 3.4 0 0 0 9.5 12a2.5 2.5 0 1 0 4 2"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                />
-                <path
-                  d="M2.5 12s3.4-6.5 9.5-6.5c1.3 0 2.5.2 3.6.6"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                />
-                <path
-                  d="M21.5 12s-2 3.7-5.6 5.6"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  stroke-linecap="round"
-                />
-              </svg>
-            </button>
-          </div>
-          <div class="button-row">
-            <button class="primary-btn" type="submit">解锁</button>
-            <button class="secondary-btn hidden" type="button" id="biometricUnlockBtn">指纹解锁</button>
-            <button class="secondary-btn" type="button" id="bioBtn">忘记密码</button>
-          </div>
-          <p class="helper">
-            密码只保存在本地加密保险箱中。忘记主密码时，可通过已设置的安全问题尝试恢复。
-          </p>
-        </form>
+                <button
+                  class="password-toggle"
+                  type="button"
+                  id="toggleAuthDataKey"
+                  aria-label="显示数据钥匙"
+                  aria-pressed="false"
+                >
+                  <svg class="toggle-icon toggle-icon-show" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linejoin="round"
+                    />
+                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.7" />
+                  </svg>
+                  <svg class="toggle-icon toggle-icon-hide hidden" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 4l16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+                    <path
+                      d="M10.5 10.5A3.4 3.4 0 0 0 9.5 12a2.5 2.5 0 1 0 4 2"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                    />
+                    <path
+                      d="M2.5 12s3.4-6.5 9.5-6.5c1.3 0 2.5.2 3.6.6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                    />
+                    <path
+                      d="M21.5 12s-2 3.7-5.6 5.6"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="button-row">
+              <button class="primary-btn" type="submit">解锁</button>
+              <button class="secondary-btn hidden" type="button" id="biometricUnlockBtn">指纹解锁</button>
+              <button class="secondary-btn" type="button" id="bioBtn">忘记密码</button>
+            </div>
+            <p class="helper">
+              密码只保存在本地加密保险箱中。忘记主密码时，可通过已设置的安全问题尝试恢复。
+            </p>
+          </form>
+        </div>
       </section>
 
       <section class="vault-screen hidden" id="vaultScreen" aria-label="密码库界面">
@@ -156,7 +211,10 @@
                   <span class="sync-pill-dot"></span>
                   <span id="topSyncText">未解锁</span>
                 </span>
-                <span class="sync-pill-time" id="lastUpdateText">上次更新时间：--</span>
+                <span class="sync-pill-times">
+                  <span class="sync-pill-time" id="lastSyncTimeText">上次同步：--</span>
+                  <span class="sync-pill-time" id="lastCheckTimeText">上次检查：--</span>
+                </span>
               </button>
               <button class="secondary-btn" type="button" id="lockBtn">锁定</button>
               <button class="secondary-btn" type="button" id="settingsBtn">设置</button>
@@ -388,14 +446,24 @@
                 </div>
 
                 <div class="settings-view hidden" id="settingsView">
-                  <div class="settings-shell">
-                    <div class="settings-head">
-                      <div>
-                        <p class="eyebrow">设置</p>
-                        <h2 id="settingsSectionTitle">安全</h2>
+                    <div class="settings-shell">
+                      <div class="settings-head">
+                        <div>
+                          <p class="eyebrow">设置</p>
+                          <div class="settings-title-row">
+                            <h2 id="settingsSectionTitle">安全</h2>
+                            <span class="hint-trigger hidden" id="settingsSectionInfo" tabindex="0" aria-label="查看说明">
+                              <svg viewBox="0 0 20 20" aria-hidden="true">
+                                <circle cx="10" cy="10" r="8"></circle>
+                                <path d="M10 8.1v4.2"></path>
+                                <circle cx="10" cy="5.8" r="0.8" class="hint-dot"></circle>
+                              </svg>
+                              <span class="hint-bubble" id="settingsSectionInfoText">--</span>
+                            </span>
+                          </div>
+                        </div>
+                        <p class="settings-section-hint" id="settingsSectionHint">主密码、解锁和恢复。</p>
                       </div>
-                      <p class="settings-section-hint" id="settingsSectionHint">主密码、解锁和恢复。</p>
-                    </div>
 
                     <div class="settings-pages">
                       <section class="settings-page" data-settings-page="security">
@@ -493,14 +561,6 @@
                             <input id="cloudCheckMinutes" type="number" min="1" max="240" step="1" />
                             <p>每隔多少分钟检查一次坚果云上的最新保险箱。默认 5 分钟。</p>
                           </label>
-
-                          <div class="setting-card action-setting">
-                            <div>
-                              <span>导出加密文件</span>
-                              <p>将当前保险箱导出为加密文件，可用于备份或同步。</p>
-                            </div>
-                            <button class="secondary-btn" type="button" id="syncBtn">导出</button>
-                          </div>
 
                           <div class="setting-card webdav-setting">
                             <div class="recovery-setting-head">
@@ -611,6 +671,14 @@
                             <span>导出前自动备份</span>
                             <input id="backupExportSetting" type="checkbox" />
                           </label>
+
+                          <div class="setting-card action-setting">
+                            <div>
+                              <span>导出加密文件</span>
+                              <p>将当前保险箱导出为加密文件，可用于备份或手动迁移。</p>
+                            </div>
+                            <button class="secondary-btn" type="button" id="syncBtn">导出</button>
+                          </div>
 
                           <div class="setting-card danger-setting">
                             <div>

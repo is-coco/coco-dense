@@ -423,6 +423,7 @@ function loadSyncConfig({ includePassword = false } = {}) {
       remotePath: "/CocoDense/vault.json",
       updatedAt: "",
       lastSyncedAt: "",
+      lastCheckedAt: "",
       appPassword: "",
     };
   }
@@ -436,6 +437,7 @@ function loadSyncConfig({ includePassword = false } = {}) {
       remotePath: normalizeRemotePath(raw?.remotePath),
       updatedAt: String(raw?.updatedAt ?? ""),
       lastSyncedAt: String(raw?.lastSyncedAt ?? ""),
+      lastCheckedAt: String(raw?.lastCheckedAt ?? ""),
       appPassword: "",
     };
     if (includePassword && config.configured) {
@@ -451,6 +453,7 @@ function loadSyncConfig({ includePassword = false } = {}) {
       remotePath: "/CocoDense/vault.json",
       updatedAt: "",
       lastSyncedAt: "",
+      lastCheckedAt: "",
       appPassword: "",
     };
   }
@@ -473,6 +476,10 @@ function saveSyncConfig(config) {
   if (!username) return { ok: false, error: "请填写 WebDAV 用户名" };
   if (!appPassword && !previous.password) return { ok: false, error: "请填写 WebDAV 应用密码" };
 
+  const sameTarget =
+    String(previous.serverUrl ?? "") === serverUrl &&
+    String(previous.username ?? "").trim() === username &&
+    normalizeRemotePath(previous.remotePath ?? "/CocoDense/vault.json") === remotePath;
   const content = {
     version: 1,
     serverUrl,
@@ -480,7 +487,8 @@ function saveSyncConfig(config) {
     remotePath,
     password: appPassword ? encryptLocalSecret(appPassword) : previous.password,
     updatedAt: new Date().toISOString(),
-    lastSyncedAt: String(previous.lastSyncedAt ?? ""),
+    lastSyncedAt: sameTarget ? String(previous.lastSyncedAt ?? "") : "",
+    lastCheckedAt: sameTarget ? String(previous.lastCheckedAt ?? "") : "",
   };
   fs.mkdirSync(path.dirname(getSyncConfigFilePath()), { recursive: true });
   fs.writeFileSync(getSyncConfigFilePath(), JSON.stringify(content, null, 2), "utf8");
@@ -502,6 +510,31 @@ function touchSyncLastSyncedAt(config, timestamp = new Date().toISOString()) {
       JSON.stringify({
         ...raw,
         lastSyncedAt: timestamp,
+        lastCheckedAt: timestamp,
+      }, null, 2),
+      "utf8",
+    );
+  } catch {
+    return timestamp;
+  }
+  return timestamp;
+}
+
+function touchSyncLastCheckedAt(config, timestamp = new Date().toISOString()) {
+  const filePath = getSyncConfigFilePath();
+  if (!fs.existsSync(filePath)) return timestamp;
+  try {
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    const sameTarget =
+      normalizeServerUrl(raw?.serverUrl) === config.serverUrl &&
+      String(raw?.username ?? "").trim() === config.username &&
+      normalizeRemotePath(raw?.remotePath) === config.remotePath;
+    if (!sameTarget) return timestamp;
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify({
+        ...raw,
+        lastCheckedAt: timestamp,
       }, null, 2),
       "utf8",
     );
@@ -807,6 +840,31 @@ function generateDataKeySecret() {
   return crypto.randomBytes(32).toString("base64url");
 }
 
+function writeRememberedDataKeyFile(dataKey) {
+  const value = String(dataKey ?? "").trim();
+  if (!value) {
+    return { ok: false, error: "当前没有可记住的数据钥匙" };
+  }
+  if (!safeStorage.isEncryptionAvailable()) {
+    return { ok: false, error: "系统加密存储不可用，无法在本机记住数据钥匙" };
+  }
+
+  const encrypted = safeStorage.encryptString(value);
+  const filePath = getDataKeyFilePath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(
+    filePath,
+    JSON.stringify({
+      version: 1,
+      platform: process.platform,
+      secret: encrypted.toString("base64"),
+      updatedAt: new Date().toISOString(),
+    }, null, 2),
+    "utf8",
+  );
+  return { ok: true };
+}
+
 function loadDataKeyFile() {
   const filePath = getDataKeyFilePath();
   if (!fs.existsSync(filePath)) {
@@ -827,10 +885,12 @@ function loadDataKeyFile() {
 function dataKeyStatus() {
   const state = loadDataKeyFile();
   const supported = safeStorage.isEncryptionAvailable();
+  const vaultState = loadVaultFile();
   return {
     supported,
     remembered: supported && state.exists && !state.corrupted,
     sessionActive: Boolean(activeDataKey),
+    required: Boolean(vaultState.exists && !vaultState.corrupted && isDataKeyVault(vaultState.data)),
     corrupted: state.corrupted,
     updatedAt: state.exists && !state.corrupted ? state.data.updatedAt : "",
     unavailableReason: supported ? "" : "系统加密存储不可用，无法在本机记住数据钥匙",
@@ -880,6 +940,43 @@ function migrateVaultToDataKey(nextDataKey, previousDataKey = "") {
   }
 }
 
+function migrateVaultOffDataKey(previousDataKey = "") {
+  const vaultState = loadVaultFile();
+  if (!vaultState.exists || vaultState.corrupted || !isDataKeyVault(vaultState.data)) {
+    return { ok: true, migrated: false };
+  }
+  if (!activeMasterPassword || !vaultCache) {
+    return { ok: false, error: "请先解锁保险箱后再清除数据钥匙" };
+  }
+
+  const dataKey = String(previousDataKey ?? "").trim() || getSessionDataKey();
+  if (!dataKey) {
+    return { ok: false, error: "当前保险箱仍在使用数据钥匙，请先解锁后再清除" };
+  }
+
+  try {
+    const decrypted = decryptVault(activeMasterPassword, vaultState.data, { dataKey });
+    const payload = {
+      ...decrypted.payload,
+      updatedAt: new Date().toISOString(),
+    };
+    const backupResult = createVaultBackup("before-data-key-removal");
+    if (!backupResult.ok) return { ok: false, error: backupResult.error || "自动备份失败，已取消清除" };
+    const wrapped = encryptJson(activeMasterPassword, payload, {
+      format: "v2",
+      vaultKey: decrypted.vaultKey || undefined,
+    });
+    saveVaultFile(wrapped);
+    vaultCache = payload;
+    return { ok: true, migrated: true, vault: payload };
+  } catch (error) {
+    if (error?.code === "DATA_KEY_INVALID" || error?.code === "DATA_KEY_REQUIRED") {
+      return { ok: false, error: "当前数据钥匙不可用，无法清除" };
+    }
+    return { ok: false, error: error?.message || "清除数据钥匙失败" };
+  }
+}
+
 function saveDataKeySecret(dataKey, options = {}) {
   const value = String(dataKey ?? "").trim();
   if (!value) {
@@ -892,6 +989,7 @@ function saveDataKeySecret(dataKey, options = {}) {
   if (!migration.ok) return migration;
   activeDataKey = value;
   if (!shouldRemember) {
+    deleteDataKeyFile();
     broadcastStatus();
     return { ok: true, status: dataKeyStatus(), vault: migration.vault || null };
   }
@@ -899,20 +997,8 @@ function saveDataKeySecret(dataKey, options = {}) {
     broadcastStatus();
     return { ok: true, status: dataKeyStatus(), vault: migration.vault || null };
   }
-
-  const encrypted = safeStorage.encryptString(value);
-  const filePath = getDataKeyFilePath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(
-    filePath,
-    JSON.stringify({
-      version: 1,
-      platform: process.platform,
-      secret: encrypted.toString("base64"),
-      updatedAt: new Date().toISOString(),
-    }, null, 2),
-    "utf8",
-  );
+  const persisted = writeRememberedDataKeyFile(value);
+  if (!persisted.ok) return persisted;
   broadcastStatus();
   return { ok: true, status: dataKeyStatus(), vault: migration.vault || null };
 }
@@ -938,11 +1024,34 @@ function deleteDataKeyFile() {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
+function setRememberedDataKey(remember) {
+  const shouldRemember = Boolean(remember);
+  if (!shouldRemember) {
+    deleteDataKeyFile();
+    broadcastStatus();
+    return { ok: true, status: dataKeyStatus() };
+  }
+
+  const currentDataKey = getSessionDataKey();
+  if (!currentDataKey) {
+    return { ok: false, error: "当前没有可记住的数据钥匙，请先保存数据钥匙" };
+  }
+
+  const persisted = writeRememberedDataKeyFile(currentDataKey);
+  if (!persisted.ok) return persisted;
+  activeDataKey = currentDataKey;
+  broadcastStatus();
+  return { ok: true, status: dataKeyStatus() };
+}
+
 function clearDataKeySecret({ forgetRemembered = true } = {}) {
+  const previousDataKey = activeDataKey;
+  const migration = migrateVaultOffDataKey(previousDataKey);
+  if (!migration.ok) return migration;
   activeDataKey = "";
   if (forgetRemembered) deleteDataKeyFile();
   broadcastStatus();
-  return { ok: true, status: dataKeyStatus() };
+  return { ok: true, status: dataKeyStatus(), vault: migration.vault || null, migrated: Boolean(migration.migrated) };
 }
 
 function loadRememberedDataKeyIntoSession() {
@@ -1631,6 +1740,13 @@ function wireWindowControls() {
       return { ok: false, error: error?.message || "保存数据钥匙失败" };
     }
   });
+  ipcMain.handle("vault:setDataKeyRemembered", (_event, remember) => {
+    try {
+      return setRememberedDataKey(remember);
+    } catch (error) {
+      return { ok: false, error: error?.message || "更新本机记住状态失败" };
+    }
+  });
   ipcMain.handle("vault:clearDataKey", () => {
     try {
       return clearDataKeySecret();
@@ -1686,9 +1802,11 @@ function wireWindowControls() {
 
       const remoteResult = await readRemoteVault(config, masterPassword);
       if (!remoteResult.ok) return remoteResult;
+      const lastCheckedAt = touchSyncLastCheckedAt(config);
       return {
         ok: true,
         exists: remoteResult.exists,
+        lastCheckedAt,
         updatedAt: remoteResult.payload?.updatedAt || "",
         payload: remoteResult.payload || null,
       };
@@ -1728,7 +1846,12 @@ function wireWindowControls() {
       const uploadResult = await writeRemoteVault(config, wrapped);
       if (!uploadResult.ok) return uploadResult;
       applySyncedVault(masterPassword, localPayload, wrapped);
-      return { ok: true, vault: localPayload, lastSyncedAt: uploadResult.lastSyncedAt };
+      return {
+        ok: true,
+        vault: localPayload,
+        lastSyncedAt: uploadResult.lastSyncedAt,
+        lastCheckedAt: uploadResult.lastSyncedAt,
+      };
     } catch (error) {
       return { ok: false, error: error?.message || "上传失败" };
     }
@@ -1754,7 +1877,7 @@ function wireWindowControls() {
 
       applySyncedVault(masterPassword, remoteResult.payload, remoteResult.wrapped);
       const lastSyncedAt = touchSyncLastSyncedAt(config);
-      return { ok: true, vault: remoteResult.payload, lastSyncedAt };
+      return { ok: true, vault: remoteResult.payload, lastSyncedAt, lastCheckedAt: lastSyncedAt };
     } catch (error) {
       return { ok: false, error: error?.message || "下载失败" };
     }
@@ -1802,6 +1925,7 @@ function wireWindowControls() {
         vault: nextPayload,
         merged: remoteResult.exists,
         lastSyncedAt: uploadResult.lastSyncedAt,
+        lastCheckedAt: uploadResult.lastSyncedAt,
       };
     } catch (error) {
       return { ok: false, error: error?.message || "同步失败" };

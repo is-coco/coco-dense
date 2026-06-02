@@ -3,6 +3,9 @@ const vaultScreen = document.getElementById("vaultScreen");
 const unlockForm = document.getElementById("unlockForm");
 const togglePassword = document.getElementById("togglePassword");
 const masterPassword = document.getElementById("masterPassword");
+const authDataKeyField = document.getElementById("authDataKeyField");
+const authDataKeyInput = document.getElementById("authDataKeyInput");
+const toggleAuthDataKey = document.getElementById("toggleAuthDataKey");
 const bioBtn = document.getElementById("bioBtn");
 const biometricUnlockBtn = document.getElementById("biometricUnlockBtn");
 const toast = document.getElementById("toast");
@@ -34,7 +37,8 @@ const sidebar = document.querySelector(".sidebar");
 const settingsBtn = document.getElementById("settingsBtn");
 const topSyncStatus = document.getElementById("topSyncStatus");
 const topSyncText = document.getElementById("topSyncText");
-const lastUpdateText = document.getElementById("lastUpdateText");
+const lastSyncTimeText = document.getElementById("lastSyncTimeText");
+const lastCheckTimeText = document.getElementById("lastCheckTimeText");
 const readView = document.getElementById("readView");
 const editView = document.getElementById("editView");
 const emptyDetailState = document.getElementById("emptyDetailState");
@@ -42,6 +46,8 @@ const settingsView = document.getElementById("settingsView");
 const settingsNav = document.getElementById("settingsNav");
 const settingsSectionTitle = document.getElementById("settingsSectionTitle");
 const settingsSectionHint = document.getElementById("settingsSectionHint");
+const settingsSectionInfo = document.getElementById("settingsSectionInfo");
+const settingsSectionInfoText = document.getElementById("settingsSectionInfoText");
 const detailModeLabel = document.getElementById("detailModeLabel");
 const entryContextMenu = document.getElementById("entryContextMenu");
 const folderContextMenu = document.getElementById("folderContextMenu");
@@ -178,10 +184,12 @@ const SETTINGS_SECTIONS = {
   "data-key": {
     title: "数据钥匙",
     hint: "独立加密钥匙。",
+    info: "数据钥匙是保护数据文件关键密钥，如需请设置高强度密码，留空则使用默认使用主密码当数据钥匙，勾选“本机记住”进入软件则无需输入数据钥匙（本软件涉及到的任何密码数据信息均以AES-256-GCM加密，破译难度取决于主密码或数据密码设置难度）",
   },
   sync: {
     title: "云同步",
     hint: "WebDAV、上传和下载。",
+    info: "这里填写的是坚果云 WebDAV 信息。用户名一般就是你的坚果云登录邮箱，应用密码需要到坚果云网页端的安全设置里单独创建，不是登录密码。",
   },
   general: {
     title: "通用",
@@ -276,6 +284,7 @@ const state = {
     remotePath: "/CocoDense/vault.json",
     updatedAt: "",
     lastSyncedAt: "",
+    lastCheckedAt: "",
   },
   appInfo: {
     version: "",
@@ -501,6 +510,10 @@ function clearSensitiveInputs() {
   if (dataKeyInput) {
     clearSecretMask(dataKeyInput);
     dataKeyInput.value = "";
+  }
+  if (authDataKeyInput) {
+    authDataKeyInput.value = "";
+    authDataKeyInput.type = "password";
   }
   currentMasterPassword.value = "";
   nextMasterPassword.value = "";
@@ -740,12 +753,18 @@ function formatStatusTime(label, value) {
   if (!value) return `${label}：--`;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return `${label}：--`;
+  return `${label}：${formatStatusDate(date)}`;
+}
+
+function formatStatusDate(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
   const now = new Date();
   const sameYear = date.getFullYear() === now.getFullYear();
   const options = sameYear
     ? { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }
     : { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" };
-  return `${label}：${date.toLocaleString("zh-CN", options)}`;
+  return date.toLocaleString("zh-CN", options);
 }
 
 function isLocalVaultNewerThanSync() {
@@ -793,10 +812,15 @@ function syncTopSyncStatus() {
   footerStatusDot?.classList.toggle("status-dot-warn", meta.state === "warn");
   footerStatusDot?.classList.toggle("status-dot-error", meta.state === "error");
   if (topSyncText) topSyncText.textContent = meta.label;
-  if (lastUpdateText) {
-    lastUpdateText.textContent = state.syncConfig?.configured
+  if (lastSyncTimeText) {
+    lastSyncTimeText.textContent = state.syncConfig?.configured
       ? formatStatusTime("上次同步", state.syncConfig?.lastSyncedAt)
       : formatStatusTime("本地更新", state.vaultMeta?.updatedAt);
+  }
+  if (lastCheckTimeText) {
+    lastCheckTimeText.textContent = state.syncConfig?.configured
+      ? formatStatusTime("上次检查", state.syncConfig?.lastCheckedAt)
+      : "上次检查：--";
   }
 }
 
@@ -808,6 +832,14 @@ function setSyncBusy(isBusy) {
 function clearSyncError() {
   state.syncError = "";
   refreshStatusText();
+}
+
+function markSyncChecked(result = {}) {
+  const lastCheckedAt = result.lastCheckedAt || new Date().toISOString();
+  state.syncConfig = {
+    ...state.syncConfig,
+    lastCheckedAt,
+  };
 }
 
 function setSyncError(message = "同步失败") {
@@ -830,9 +862,11 @@ function showDataKeySyncPrompt(result, options = {}) {
 
 function markSyncSucceeded(result = {}) {
   const lastSyncedAt = result.lastSyncedAt || new Date().toISOString();
+  const lastCheckedAt = result.lastCheckedAt || lastSyncedAt;
   state.syncConfig = {
     ...state.syncConfig,
     lastSyncedAt,
+    lastCheckedAt,
   };
   clearSyncError();
 }
@@ -866,6 +900,19 @@ function syncAuthBiometricAction() {
       state.biometricStatus.configured,
   );
   biometricUnlockBtn?.classList.toggle("hidden", !canUnlock);
+}
+
+function syncAuthDataKeyField() {
+  const needsDataKey = Boolean(state.hasVaultFile && state.dataKeyStatus?.required && !state.dataKeyStatus?.remembered);
+  authDataKeyField?.classList.toggle("hidden", !needsDataKey);
+  if (!needsDataKey && authDataKeyInput) {
+    authDataKeyInput.value = "";
+  }
+  if (state.hasVaultFile && !state.vaultCorrupted) {
+    authHelper.textContent = needsDataKey
+      ? "请输入主密码和数据钥匙后解锁；忘记主密码时可使用已设置的安全问题。"
+      : "输入主密码解锁；忘记主密码时可使用已设置的安全问题。";
+  }
 }
 
 function hasActiveSelection() {
@@ -950,6 +997,12 @@ function syncSettingsNavigation() {
   const meta = SETTINGS_SECTIONS[section];
   if (settingsSectionTitle) settingsSectionTitle.textContent = meta.title;
   if (settingsSectionHint) settingsSectionHint.textContent = meta.hint;
+  if (settingsSectionInfo && settingsSectionInfoText) {
+    const info = String(meta.info || "").trim();
+    settingsSectionInfo.classList.toggle("hidden", !info);
+    settingsSectionInfoText.textContent = info || "--";
+    settingsSectionInfo.setAttribute("aria-label", info ? `查看${meta.title}说明` : "查看说明");
+  }
 
   settingsNav?.querySelectorAll("[data-settings-section]").forEach((button) => {
     const active = button.dataset.settingsSection === section;
@@ -1041,17 +1094,17 @@ function syncDataKeySettings() {
   const corrupted = Boolean(status.corrupted);
 
   if (dataKeyStatusText) {
-    dataKeyStatusText.textContent = !supported
-      ? status.unavailableReason || "系统加密存储不可用，无法在本机记住数据钥匙。"
-      : corrupted
-        ? "本机数据钥匙配置异常，请重新保存。"
-        : remembered
-          ? sessionActive
-            ? "本机已记住，当前会话也已加载。"
-            : "本机已记住，重新解锁后会自动加载。"
-          : sessionActive
-            ? "当前会话已加载，关闭软件后会清空。"
-            : "未设置。保存后，保险箱内容将改由数据钥匙解密。";
+    if (!supported) {
+      dataKeyStatusText.textContent = "当前版本暂不支持数据钥匙。";
+    } else if (corrupted) {
+      dataKeyStatusText.textContent = "本机数据钥匙状态异常，请重新保存一次。";
+    } else if (remembered) {
+      dataKeyStatusText.textContent = "本机已记住，进入软件时会自动加载。";
+    } else if (sessionActive) {
+      dataKeyStatusText.textContent = "当前会话已加载，关闭软件后需要重新输入。";
+    } else {
+      dataKeyStatusText.textContent = "未设置，当前默认使用主密码保护数据。";
+    }
   }
   if (dataKeyStatusPill) {
     dataKeyStatusPill.textContent = remembered ? "已记住" : sessionActive ? "会话中" : "未设置";
@@ -1068,6 +1121,7 @@ function syncDataKeySettings() {
   ) {
     setSecretMask(dataKeyInput);
   }
+  syncAuthDataKeyField();
 }
 
 function getWebdavFormConfig() {
@@ -1355,6 +1409,7 @@ async function runCloudSyncCheck() {
       setSyncError(remote?.error || "同步检查失败");
       return false;
     }
+    markSyncChecked(remote);
     if (!remote.exists) {
       clearPendingCloudUpdate();
       if (isLocalVaultNewerThanSync() && !state.editing) {
@@ -1462,21 +1517,23 @@ async function syncLocalMutationToCloud(payload = getVaultPayload()) {
   }
 }
 
-async function forceUploadDataKeyVault(payload) {
+async function forceUploadDataKeyVault(payload, options = {}) {
   if (!state.unlocked || !state.masterPassword || !state.syncConfig?.configured || !payload) return false;
   const syncConfig = state.syncConfig || {};
+  const successMessage = options.successMessage || "数据钥匙已保存并同步到云端";
+  const failureMessage = options.failureMessage || "数据钥匙已保存，但上传云端失败";
   clearPendingCloudUpdate();
   clearSyncError();
   setSyncBusy(true);
   try {
     const result = await window.vault?.uploadSync?.(state.masterPassword, payload, syncConfig, { force: true });
     if (!result?.ok) {
-      setSyncError(result?.error || "数据钥匙已保存，但上传云端失败");
-      showToast(result?.error || "数据钥匙已保存，但上传云端失败");
+      setSyncError(result?.error || failureMessage);
+      showToast(result?.error || failureMessage);
       return false;
     }
     markSyncSucceeded(result);
-    showToast("数据钥匙已保存并同步到云端");
+    showToast(successMessage);
     return true;
   } finally {
     setSyncBusy(false);
@@ -1551,9 +1608,11 @@ async function refreshWebdavConfig() {
     remotePath: config.remotePath || "/CocoDense/vault.json",
     updatedAt: config.updatedAt || "",
     lastSyncedAt: config.lastSyncedAt || "",
+    lastCheckedAt: config.lastCheckedAt || "",
   };
   if (isSameSyncTarget(state.syncConfig, nextConfig)) {
     nextConfig.lastSyncedAt = latestTimestampValue(state.syncConfig?.lastSyncedAt, nextConfig.lastSyncedAt);
+    nextConfig.lastCheckedAt = latestTimestampValue(state.syncConfig?.lastCheckedAt, nextConfig.lastCheckedAt);
   }
   state.syncConfig = {
     ...nextConfig,
@@ -2327,6 +2386,7 @@ async function refreshDataKeyStatus() {
     supported: Boolean(status?.supported),
     remembered: Boolean(status?.remembered),
     sessionActive: Boolean(status?.sessionActive),
+    required: Boolean(status?.required),
     corrupted: Boolean(status?.corrupted),
     updatedAt: status?.updatedAt || "",
     unavailableReason: status?.unavailableReason || "",
@@ -2360,6 +2420,7 @@ async function saveDataKeySettings() {
     supported: Boolean(result.status?.supported),
     remembered: Boolean(result.status?.remembered),
     sessionActive: Boolean(result.status?.sessionActive),
+    required: Boolean(result.status?.required),
     corrupted: Boolean(result.status?.corrupted),
     updatedAt: result.status?.updatedAt || "",
     unavailableReason: result.status?.unavailableReason || "",
@@ -2395,6 +2456,7 @@ async function generateDataKeySettings() {
     supported: Boolean(result.status?.supported),
     remembered: Boolean(result.status?.remembered),
     sessionActive: Boolean(result.status?.sessionActive),
+    required: Boolean(result.status?.required),
     corrupted: Boolean(result.status?.corrupted),
     updatedAt: result.status?.updatedAt || "",
     unavailableReason: result.status?.unavailableReason || "",
@@ -2405,6 +2467,13 @@ async function generateDataKeySettings() {
 }
 
 async function clearDataKeySettings() {
+  if (!state.unlocked || !state.masterPassword) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  if (!confirmAction("清空后会取消数据钥匙保护，并立即同步覆盖云端。确定继续吗？")) {
+    return;
+  }
   const result = await window.vault?.clearDataKey?.();
   if (!result?.ok) {
     showToast(result?.error || "清除数据钥匙失败");
@@ -2418,15 +2487,61 @@ async function clearDataKeySettings() {
     supported: Boolean(result.status?.supported),
     remembered: Boolean(result.status?.remembered),
     sessionActive: Boolean(result.status?.sessionActive),
+    required: Boolean(result.status?.required),
+    corrupted: Boolean(result.status?.corrupted),
+    updatedAt: result.status?.updatedAt || "",
+    unavailableReason: result.status?.unavailableReason || "",
+  };
+  if (result.vault) {
+    loadVaultPayload(result.vault, { preserveView: true });
+  }
+  syncDataKeySettings();
+  if (result.vault && state.syncConfig?.configured) {
+    await forceUploadDataKeyVault(result.vault, {
+      successMessage: "已清除数据钥匙并同步到云端",
+      failureMessage: "数据钥匙已清除，但上传云端失败",
+    });
+  } else {
+    showToast("已清除数据钥匙");
+  }
+  touchActivity();
+}
+
+async function toggleRememberDataKeySetting() {
+  if (!rememberDataKeySetting) return;
+  const shouldRemember = rememberDataKeySetting.checked;
+  const previousChecked = !shouldRemember;
+
+  if (!shouldRemember && !state.dataKeyStatus?.remembered) {
+    return;
+  }
+  if (shouldRemember && !state.dataKeyStatus?.sessionActive && !state.dataKeyStatus?.remembered) {
+    rememberDataKeySetting.checked = false;
+    showToast("请先保存数据钥匙，再开启本机记住");
+    return;
+  }
+
+  rememberDataKeySetting.disabled = true;
+  const result = await window.vault?.setDataKeyRemembered?.(shouldRemember);
+  rememberDataKeySetting.disabled = false;
+  if (!result?.ok) {
+    rememberDataKeySetting.checked = previousChecked;
+    showToast(result?.error || "更新本机记住状态失败");
+    syncDataKeySettings();
+    return;
+  }
+
+  state.dataKeyStatus = {
+    supported: Boolean(result.status?.supported),
+    remembered: Boolean(result.status?.remembered),
+    sessionActive: Boolean(result.status?.sessionActive),
+    required: Boolean(result.status?.required),
     corrupted: Boolean(result.status?.corrupted),
     updatedAt: result.status?.updatedAt || "",
     unavailableReason: result.status?.unavailableReason || "",
   };
   syncDataKeySettings();
-  showToast("已清除数据钥匙，请重新解锁");
-  if (state.unlocked) {
-    lockVaultSilently();
-  }
+  showToast(shouldRemember ? "已开启本机记住" : "已关闭本机记住");
   touchActivity();
 }
 
@@ -2739,6 +2854,7 @@ async function initAuthState() {
       ? "输入主密码解锁；忘记密码时可使用已设置的安全问题。"
       : "首次输入主密码会创建新的加密保险箱。";
   }
+  syncDataKeySettings();
   syncAuthSecondaryAction();
   refreshStatusText();
 }
@@ -3222,13 +3338,19 @@ unlockForm.addEventListener("submit", async (event) => {
     return;
   }
   const password = masterPassword.value.trim();
+  const dataKey = authDataKeyInput?.value.trim() || "";
   if (!password) {
     showToast("请输入主密码");
     masterPassword.focus();
     return;
   }
+  if (state.hasVaultFile && state.dataKeyStatus?.required && !state.dataKeyStatus?.remembered && !dataKey) {
+    showToast("请输入数据钥匙");
+    authDataKeyInput?.focus();
+    return;
+  }
 
-  const result = await window.vault?.unlock?.(password);
+  const result = await window.vault?.unlock?.(password, dataKey);
   if (!result?.ok) {
     if (result?.retryAfter) updateUnlockCooldown(Date.now() + result.retryAfter * 1000);
     showToast(result?.error || "解锁失败");
@@ -3251,6 +3373,16 @@ togglePassword.addEventListener("click", () => {
   togglePassword.setAttribute("aria-pressed", String(isPassword));
   togglePassword.querySelector(".toggle-icon-show")?.classList.toggle("hidden", isPassword);
   togglePassword.querySelector(".toggle-icon-hide")?.classList.toggle("hidden", !isPassword);
+});
+
+toggleAuthDataKey?.addEventListener("click", () => {
+  const isPassword = authDataKeyInput?.type === "password";
+  if (!authDataKeyInput) return;
+  authDataKeyInput.type = isPassword ? "text" : "password";
+  toggleAuthDataKey.setAttribute("aria-label", isPassword ? "隐藏数据钥匙" : "显示数据钥匙");
+  toggleAuthDataKey.setAttribute("aria-pressed", String(isPassword));
+  toggleAuthDataKey.querySelector(".toggle-icon-show")?.classList.toggle("hidden", isPassword);
+  toggleAuthDataKey.querySelector(".toggle-icon-hide")?.classList.toggle("hidden", !isPassword);
 });
 
 toggleEntryPassword.addEventListener("click", () => {
@@ -3356,6 +3488,7 @@ changePasswordModal?.addEventListener("click", (event) => {
 
 generateDataKeyBtn?.addEventListener("click", generateDataKeySettings);
 saveDataKeyBtn?.addEventListener("click", saveDataKeySettings);
+rememberDataKeySetting?.addEventListener("change", toggleRememberDataKeySetting);
 clearDataKeyBtn?.addEventListener("click", clearDataKeySettings);
 dataKeyInput?.addEventListener("focus", () => {
   clearSecretMask(dataKeyInput);
@@ -3888,6 +4021,7 @@ window.vault?.onStatus?.((status) => {
       supported: Boolean(status.dataKey.supported),
       remembered: Boolean(status.dataKey.remembered),
       sessionActive: Boolean(status.dataKey.sessionActive),
+      required: Boolean(status.dataKey.required),
       corrupted: Boolean(status.dataKey.corrupted),
       updatedAt: status.dataKey.updatedAt || "",
       unavailableReason: status.dataKey.unavailableReason || "",
