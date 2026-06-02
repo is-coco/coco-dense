@@ -109,6 +109,14 @@ const testWebdavBtn = document.getElementById("testWebdavBtn");
 const uploadWebdavBtn = document.getElementById("uploadWebdavBtn");
 const downloadWebdavBtn = document.getElementById("downloadWebdavBtn");
 const mergeWebdavBtn = document.getElementById("mergeWebdavBtn");
+const updateStatusText = document.getElementById("updateStatusText");
+const updateStatusPill = document.getElementById("updateStatusPill");
+const currentVersionText = document.getElementById("currentVersionText");
+const latestVersionText = document.getElementById("latestVersionText");
+const updateAssetText = document.getElementById("updateAssetText");
+const checkUpdateBtn = document.getElementById("checkUpdateBtn");
+const downloadUpdateBtn = document.getElementById("downloadUpdateBtn");
+const openReleaseBtn = document.getElementById("openReleaseBtn");
 const openRecoverySettingsBtn = document.getElementById("openRecoverySettingsBtn");
 const recoverySettingsModal = document.getElementById("recoverySettingsModal");
 const recoverySettingsForm = document.getElementById("recoverySettingsForm");
@@ -163,6 +171,10 @@ const SETTINGS_SECTIONS = {
   general: {
     title: "通用",
     hint: "编辑和显示习惯。",
+  },
+  update: {
+    title: "更新",
+    hint: "检查和下载新版本。",
   },
   backup: {
     title: "备份",
@@ -245,6 +257,12 @@ const state = {
     updatedAt: "",
     lastSyncedAt: "",
   },
+  appInfo: {
+    version: "",
+    platform: "",
+    arch: "",
+  },
+  updateInfo: null,
 };
 
 function normalizePriority(priority) {
@@ -923,6 +941,7 @@ function syncSettingsForm() {
   if (backupExportSetting) backupExportSetting.checked = Boolean(state.settings.backupBeforeExport);
   syncSettingsNavigation();
   syncDataKeySettings();
+  syncUpdateSettings();
 }
 
 function syncRecoverySettings() {
@@ -1043,6 +1062,112 @@ function syncWebdavSettingsForm() {
   if (uploadWebdavBtn) uploadWebdavBtn.disabled = !syncReady;
   if (downloadWebdavBtn) downloadWebdavBtn.disabled = !syncReady;
   if (mergeWebdavBtn) mergeWebdavBtn.disabled = !syncReady;
+}
+
+function syncUpdateSettings() {
+  const currentVersion = state.appInfo?.version || "";
+  const latestVersion = state.updateInfo?.latestVersion || "";
+  const updateAvailable = Boolean(state.updateInfo?.updateAvailable);
+  if (currentVersionText) currentVersionText.textContent = currentVersion ? `v${currentVersion}` : "--";
+  if (latestVersionText) latestVersionText.textContent = latestVersion ? `v${latestVersion}` : "--";
+  if (downloadUpdateBtn) downloadUpdateBtn.disabled = !updateAvailable || !state.updateInfo?.assetUrl;
+  if (updateStatusPill) {
+    updateStatusPill.textContent = updateAvailable ? "有新版" : latestVersion ? "已是最新" : "未检查";
+    updateStatusPill.classList.toggle("is-live", updateAvailable);
+  }
+  if (updateStatusText && !state.updateChecking && !state.updateDownloading) {
+    if (updateAvailable) {
+      updateStatusText.textContent = `发现新版本 v${latestVersion}，可下载并打开安装包。`;
+    } else if (latestVersion) {
+      updateStatusText.textContent = "当前已经是最新版本。";
+    } else {
+      updateStatusText.textContent = "检查 GitHub Release 中的最新版本。";
+    }
+  }
+  if (updateAssetText) {
+    updateAssetText.textContent = state.updateInfo?.assetName
+      ? `将下载：${state.updateInfo.assetName}`
+      : "发现新版后，会自动选择当前系统对应的安装包。";
+  }
+}
+
+async function refreshAppInfo() {
+  const result = await window.vault?.getAppInfo?.();
+  if (result?.ok) {
+    state.appInfo = {
+      version: result.version || "",
+      platform: result.platform || "",
+      arch: result.arch || "",
+    };
+  }
+  syncUpdateSettings();
+  return state.appInfo;
+}
+
+async function checkForAppUpdates() {
+  state.updateChecking = true;
+  if (checkUpdateBtn) {
+    checkUpdateBtn.disabled = true;
+    checkUpdateBtn.textContent = "检查中";
+  }
+  if (updateStatusText) updateStatusText.textContent = "正在连接 GitHub 检查最新版本...";
+  try {
+    const result = await window.vault?.checkForUpdates?.();
+    if (!result?.ok) {
+      showToast(result?.error || "检查更新失败");
+      if (updateStatusText) updateStatusText.textContent = result?.error || "检查更新失败";
+      return false;
+    }
+    state.updateInfo = result;
+    showToast(result.updateAvailable ? `发现新版本 v${result.latestVersion}` : "当前已经是最新版本");
+    syncUpdateSettings();
+    return result.updateAvailable;
+  } finally {
+    state.updateChecking = false;
+    if (checkUpdateBtn) {
+      checkUpdateBtn.disabled = false;
+      checkUpdateBtn.textContent = "检查更新";
+    }
+  }
+}
+
+async function downloadAppUpdate() {
+  if (!state.updateInfo?.updateAvailable) {
+    const hasUpdate = await checkForAppUpdates();
+    if (!hasUpdate) return;
+  }
+  state.updateDownloading = true;
+  if (downloadUpdateBtn) {
+    downloadUpdateBtn.disabled = true;
+    downloadUpdateBtn.textContent = "下载中";
+  }
+  if (updateStatusText) updateStatusText.textContent = "正在下载安装包，完成后会自动打开。";
+  try {
+    const result = await window.vault?.downloadUpdate?.();
+    if (!result?.ok) {
+      showToast(result?.error || "下载更新失败");
+      if (updateStatusText) updateStatusText.textContent = result?.error || "下载更新失败";
+      syncUpdateSettings();
+      return;
+    }
+    state.updateInfo = result;
+    const message = result.opened ? "安装包已下载并打开" : "安装包已下载，请在下载目录中打开";
+    showToast(message);
+    if (updateStatusText) updateStatusText.textContent = `${message}：${result.filePath || ""}`;
+    syncUpdateSettings();
+  } finally {
+    state.updateDownloading = false;
+    if (downloadUpdateBtn) {
+      downloadUpdateBtn.textContent = "下载并打开";
+    }
+    syncUpdateSettings();
+  }
+}
+
+async function openReleasePage() {
+  const targetUrl = state.updateInfo?.releaseUrl || "https://github.com/is-coco/coco-dense/releases";
+  const result = await window.vault?.openExternal?.(targetUrl);
+  showToast(result?.ok ? "已打开发布页" : result?.error || "无法打开发布页");
 }
 
 function getCloudSyncIntervalMs() {
@@ -2372,6 +2497,7 @@ function openSettingsView() {
   setDetailMode("settings");
   setSettingsSection(state.settingsSection || "security");
   syncSettingsForm();
+  refreshAppInfo();
   refreshDataKeyStatus();
   refreshWebdavConfig();
 }
@@ -2722,6 +2848,18 @@ mergeWebdavBtn?.addEventListener("click", () => {
   mergeWebdavNow();
 });
 
+checkUpdateBtn?.addEventListener("click", () => {
+  checkForAppUpdates();
+});
+
+downloadUpdateBtn?.addEventListener("click", () => {
+  downloadAppUpdate();
+});
+
+openReleaseBtn?.addEventListener("click", () => {
+  openReleasePage();
+});
+
 deleteEntryBtn.addEventListener("click", () => {
   if (!state.activeId) return showToast("当前没有可删除的记录");
   const entry = getActiveEntry();
@@ -3057,6 +3195,7 @@ window.vault?.onStatus?.((status) => {
 });
 
 queueMicrotask(() => {
+  refreshAppInfo();
   initAuthState();
   syncDetailSurface();
 });

@@ -2,6 +2,8 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, systemPre
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
 
 let loginWindow = null;
 let vaultWindow = null;
@@ -25,6 +27,7 @@ const VAULT_FORMAT_V2 = "coco-dense-envelope-v2";
 const VAULT_FORMAT_V3 = "coco-dense-envelope-v3";
 const REMOTE_WRITE_VERIFY_ATTEMPTS = 6;
 const REMOTE_WRITE_VERIFY_DELAY_MS = 700;
+const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/is-coco/coco-dense/releases/latest";
 
 function getAppIconPath() {
   return path.join(__dirname, "assets", "app-icon.png");
@@ -1070,6 +1073,97 @@ function validateExternalUrl(targetUrl) {
   }
 }
 
+function normalizeVersion(version) {
+  return String(version ?? "").trim().replace(/^v/i, "").split("-")[0];
+}
+
+function compareVersions(currentVersion, nextVersion) {
+  const currentParts = normalizeVersion(currentVersion).split(".").map((part) => Number(part) || 0);
+  const nextParts = normalizeVersion(nextVersion).split(".").map((part) => Number(part) || 0);
+  const length = Math.max(currentParts.length, nextParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const current = currentParts[index] || 0;
+    const next = nextParts[index] || 0;
+    if (next > current) return 1;
+    if (next < current) return -1;
+  }
+  return 0;
+}
+
+function selectReleaseAsset(release) {
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  const platform = process.platform;
+  const arch = process.arch;
+  if (platform === "darwin") {
+    const dmgAssets = assets.filter((asset) => /\.dmg$/i.test(asset?.name || ""));
+    return (
+      dmgAssets.find((asset) => arch === "arm64" && /arm64/i.test(asset.name || "")) ||
+      dmgAssets[0] ||
+      assets.find((asset) => /\.zip$/i.test(asset?.name || ""))
+    );
+  }
+  if (platform === "win32") {
+    return assets.find((asset) => /\.exe$/i.test(asset?.name || ""));
+  }
+  return null;
+}
+
+async function fetchLatestRelease() {
+  const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "Coco-Dense-Updater",
+    },
+  });
+  if (!response.ok) {
+    return { ok: false, error: `检查更新失败：${response.status}` };
+  }
+  return { ok: true, release: await response.json() };
+}
+
+function normalizeReleaseInfo(release) {
+  const currentVersion = app.getVersion();
+  const latestVersion = String(release?.tag_name || release?.name || "").replace(/^v/i, "");
+  const asset = selectReleaseAsset(release);
+  return {
+    currentVersion,
+    latestVersion,
+    updateAvailable: compareVersions(currentVersion, latestVersion) > 0,
+    releaseName: release?.name || release?.tag_name || "",
+    releaseUrl: release?.html_url || "https://github.com/is-coco/coco-dense/releases",
+    notes: release?.body || "",
+    assetName: asset?.name || "",
+    assetUrl: asset?.browser_download_url || "",
+    platform: process.platform,
+    arch: process.arch,
+  };
+}
+
+function safeDownloadName(name) {
+  return String(name || "Coco-Dense-update")
+    .replace(/[\\/:*?"<>|]+/g, "-")
+    .replace(/\s+/g, ".")
+    .slice(0, 160);
+}
+
+async function downloadReleaseAsset(assetUrl, assetName) {
+  const parsed = new URL(String(assetUrl || ""));
+  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
+    return { ok: false, error: "更新下载地址无效" };
+  }
+  const response = await fetch(parsed.href, {
+    headers: {
+      "User-Agent": "Coco-Dense-Updater",
+    },
+  });
+  if (!response.ok || !response.body) {
+    return { ok: false, error: `下载更新失败：${response.status}` };
+  }
+  const filePath = path.join(app.getPath("downloads"), safeDownloadName(assetName));
+  await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(filePath));
+  return { ok: true, filePath };
+}
+
 function resetUnlockFailures() {
   unlockFailures = 0;
   unlockLockedUntil = 0;
@@ -1398,6 +1492,44 @@ function wireWindowControls() {
   ipcMain.handle("vault:getRecoveryStatus", () => recoveryStatus());
   ipcMain.handle("vault:getBiometricStatus", () => biometricStatus());
   ipcMain.handle("vault:getDataKeyStatus", () => dataKeyStatus());
+  ipcMain.handle("app:getInfo", () => ({
+    ok: true,
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+  }));
+  ipcMain.handle("update:check", async () => {
+    try {
+      const latest = await fetchLatestRelease();
+      if (!latest.ok) return latest;
+      return { ok: true, ...normalizeReleaseInfo(latest.release) };
+    } catch (error) {
+      return { ok: false, error: error?.message || "检查更新失败" };
+    }
+  });
+  ipcMain.handle("update:download", async () => {
+    try {
+      const latest = await fetchLatestRelease();
+      if (!latest.ok) return latest;
+      const info = normalizeReleaseInfo(latest.release);
+      if (!info.updateAvailable) {
+        return { ok: false, ...info, error: "当前已经是最新版本" };
+      }
+      if (!info.assetUrl) {
+        return { ok: false, ...info, error: "没有找到适合当前系统的安装包" };
+      }
+      const downloaded = await downloadReleaseAsset(info.assetUrl, info.assetName);
+      if (!downloaded.ok) return { ...downloaded, ...info };
+      const openError = await shell.openPath(downloaded.filePath);
+      if (openError) {
+        shell.showItemInFolder(downloaded.filePath);
+        return { ok: true, ...info, filePath: downloaded.filePath, opened: false, error: openError };
+      }
+      return { ok: true, ...info, filePath: downloaded.filePath, opened: true };
+    } catch (error) {
+      return { ok: false, error: error?.message || "下载更新失败" };
+    }
+  });
   ipcMain.handle("vault:generateDataKey", () => {
     const dataKey = generateDataKeySecret();
     return { ok: true, dataKey, status: dataKeyStatus() };

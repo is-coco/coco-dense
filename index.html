@@ -220,6 +220,10 @@
                   <span>通用</span>
                   <small>编辑和显示习惯</small>
                 </button>
+                <button class="settings-nav-item" type="button" data-settings-section="update">
+                  <span>更新</span>
+                  <small>检查新版本</small>
+                </button>
                 <button class="settings-nav-item" type="button" data-settings-section="backup">
                   <span>备份</span>
                   <small>导出、清理</small>
@@ -551,6 +555,36 @@
                             <span>启动时显示欢迎页</span>
                             <input id="welcomeSetting" type="checkbox" />
                           </label>
+                        </div>
+                      </section>
+
+                      <section class="settings-page hidden" data-settings-page="update">
+                        <div class="settings-grid">
+                          <div class="setting-card update-setting">
+                            <div class="recovery-setting-head">
+                              <div>
+                                <span>软件更新</span>
+                                <p id="updateStatusText">检查 GitHub Release 中的最新版本。</p>
+                              </div>
+                              <span class="recovery-pill" id="updateStatusPill">未检查</span>
+                            </div>
+                            <div class="update-version-grid">
+                              <div>
+                                <small>当前版本</small>
+                                <strong id="currentVersionText">--</strong>
+                              </div>
+                              <div>
+                                <small>最新版本</small>
+                                <strong id="latestVersionText">--</strong>
+                              </div>
+                            </div>
+                            <p class="update-asset-text" id="updateAssetText">发现新版后，会自动选择当前系统对应的安装包。</p>
+                            <div class="update-actions">
+                              <button class="secondary-btn" type="button" id="checkUpdateBtn">检查更新</button>
+                              <button class="primary-btn" type="button" id="downloadUpdateBtn" disabled>下载并打开</button>
+                              <button class="secondary-btn" type="button" id="openReleaseBtn">打开发布页</button>
+                            </div>
+                          </div>
                         </div>
                       </section>
 

@@ -1249,6 +1249,52 @@ textarea::placeholder {
   line-height: 1.42;
 }
 
+.update-setting {
+  grid-column: 1 / -1;
+  gap: 10px;
+}
+
+.update-version-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.update-version-grid > div {
+  display: grid;
+  gap: 4px;
+  min-height: 54px;
+  padding: 10px 11px;
+  border: 1px solid rgba(60, 60, 67, 0.09);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.78);
+}
+
+.update-version-grid small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.update-version-grid strong {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 760;
+}
+
+.update-asset-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
 .recovery-setting {
   gap: 7px;
   padding-bottom: 10px;
