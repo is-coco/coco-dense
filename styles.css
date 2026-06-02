@@ -320,9 +320,9 @@ textarea::placeholder {
 .app-header {
   position: relative;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   min-height: 50px;
-  padding: 8px 12px 8px 70px;
+  padding: 8px 14px 8px 92px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.75);
   -webkit-app-region: drag;
@@ -330,7 +330,7 @@ textarea::placeholder {
 }
 
 .native-window-controls .app-header {
-  padding-left: 82px;
+  padding-left: 104px;
 }
 
 .window-drag {
@@ -351,6 +351,8 @@ textarea::placeholder {
 .topbar-actions {
   position: relative;
   z-index: 10;
+  margin-left: auto;
+  max-width: min(100%, 520px);
   flex-wrap: wrap;
   justify-content: flex-end;
   -webkit-app-region: no-drag;
@@ -492,6 +494,20 @@ textarea::placeholder {
 
 .brand-compact {
   gap: 0;
+  min-width: 0;
+  flex: 1 1 180px;
+  padding-right: 8px;
+}
+
+.brand-compact > div {
+  min-width: 0;
+}
+
+.brand-compact .eyebrow,
+.brand-compact h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-body {

@@ -969,6 +969,12 @@ async function runCloudSyncCheck() {
       return false;
     }
     if (!remote.exists) {
+      clearPendingCloudUpdate();
+      if (isLocalVaultNewerThanSync() && !state.editing) {
+        clearSyncError();
+        await queueCloudSync(getVaultPayload({ touchUpdatedAt: false }));
+        return true;
+      }
       clearSyncError();
       return false;
     }
