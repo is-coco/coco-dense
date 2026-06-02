@@ -57,6 +57,11 @@ contextBridge.exposeInMainWorld("vault", {
     ipcRenderer.on("app:showVault", handler);
     return () => ipcRenderer.removeListener("app:showVault", handler);
   },
+  onVaultUpdated: (callback) => {
+    const handler = (_event, payload) => callback?.(payload);
+    ipcRenderer.on("app:vaultUpdated", handler);
+    return () => ipcRenderer.removeListener("app:vaultUpdated", handler);
+  },
   onStatus: (callback) => {
     const handler = (_event, status) => callback?.(status);
     ipcRenderer.on("app:status", handler);

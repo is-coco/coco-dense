@@ -701,6 +701,7 @@ function applySyncedVault(masterPassword, payload, wrapped) {
     saveBiometricSecret(masterPassword);
   }
   broadcastStatus();
+  broadcastVaultUpdated(payload, activeMasterPassword);
 }
 
 function encryptVaultForSave(masterPassword, payload) {
@@ -1194,6 +1195,14 @@ function broadcastStatus() {
     vaultWindow.webContents.send("app:status", status);
   }
   return status;
+}
+
+function broadcastVaultUpdated(payload, masterPassword = activeMasterPassword) {
+  if (!payload || !vaultWindow || vaultWindow.isDestroyed()) return;
+  vaultWindow.webContents.send("app:vaultUpdated", {
+    vault: payload,
+    masterPassword,
+  });
 }
 
 function createBaseWindow(options) {

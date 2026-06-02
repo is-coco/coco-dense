@@ -2844,6 +2844,20 @@ function showMainVault(payload) {
 
 window.vault?.onShowVault?.(showMainVault);
 
+window.vault?.onVaultUpdated?.((payload) => {
+  if (payload?.masterPassword) {
+    state.masterPassword = payload.masterPassword;
+    state.unlocked = true;
+  }
+  if (!state.unlocked) {
+    showMainVault(payload);
+    return;
+  }
+  if (payload?.vault) {
+    loadVaultPayload(payload.vault, { preserveView: true });
+  }
+});
+
 window.vault?.onClearAuth?.(() => {
   clearCloudSyncTimer();
   closeChangePasswordModal();
