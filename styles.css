@@ -1289,10 +1289,93 @@ textarea::placeholder {
   line-height: 1.45;
 }
 
+.update-progress {
+  display: grid;
+  gap: 7px;
+  padding: 10px 11px;
+  border: 1px solid rgba(0, 122, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 122, 255, 0.04);
+}
+
+.update-progress.hidden {
+  display: none;
+}
+
+.update-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.update-progress-head span {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-progress-head small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.update-progress-track {
+  position: relative;
+  overflow: hidden;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(60, 60, 67, 0.1);
+}
+
+.update-progress-track span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #007aff, #34c759);
+  transition: width 160ms ease;
+}
+
+.update-progress-track.is-indeterminate span {
+  width: 42%;
+  animation: updateProgressIndeterminate 1.1s ease-in-out infinite;
+}
+
+.update-progress p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .update-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.recovery-pill.is-busy {
+  color: #8a5a00;
+  background: rgba(255, 184, 0, 0.18);
+}
+
+.recovery-pill.is-error {
+  color: #b42318;
+  background: rgba(255, 59, 48, 0.12);
+}
+
+@keyframes updateProgressIndeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
 }
 
 .recovery-setting {

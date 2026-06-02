@@ -75,4 +75,9 @@ contextBridge.exposeInMainWorld("vault", {
     ipcRenderer.on("app:clearAuth", handler);
     return () => ipcRenderer.removeListener("app:clearAuth", handler);
   },
+  onUpdateDownloadProgress: (callback) => {
+    const handler = (_event, progress) => callback?.(progress);
+    ipcRenderer.on("update:downloadProgress", handler);
+    return () => ipcRenderer.removeListener("update:downloadProgress", handler);
+  },
 });

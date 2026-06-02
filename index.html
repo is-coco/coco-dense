@@ -579,6 +579,16 @@
                               </div>
                             </div>
                             <p class="update-asset-text" id="updateAssetText">发现新版后，会自动选择当前系统对应的安装包。</p>
+                            <div class="update-progress hidden" id="updateProgressPanel" aria-live="polite">
+                              <div class="update-progress-head">
+                                <span id="updateProgressPercent">0%</span>
+                                <small id="updateProgressMeta">等待下载</small>
+                              </div>
+                              <div class="update-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                                <span id="updateProgressBar"></span>
+                              </div>
+                              <p id="updateProgressFile">--</p>
+                            </div>
                             <div class="update-actions">
                               <button class="secondary-btn" type="button" id="checkUpdateBtn">检查更新</button>
                               <button class="primary-btn" type="button" id="downloadUpdateBtn" disabled>下载并打开</button>

@@ -114,6 +114,12 @@ const updateStatusPill = document.getElementById("updateStatusPill");
 const currentVersionText = document.getElementById("currentVersionText");
 const latestVersionText = document.getElementById("latestVersionText");
 const updateAssetText = document.getElementById("updateAssetText");
+const updateProgressPanel = document.getElementById("updateProgressPanel");
+const updateProgressPercent = document.getElementById("updateProgressPercent");
+const updateProgressMeta = document.getElementById("updateProgressMeta");
+const updateProgressTrack = updateProgressPanel?.querySelector(".update-progress-track");
+const updateProgressBar = document.getElementById("updateProgressBar");
+const updateProgressFile = document.getElementById("updateProgressFile");
 const checkUpdateBtn = document.getElementById("checkUpdateBtn");
 const downloadUpdateBtn = document.getElementById("downloadUpdateBtn");
 const openReleaseBtn = document.getElementById("openReleaseBtn");
@@ -263,6 +269,7 @@ const state = {
     arch: "",
   },
   updateInfo: null,
+  updateDownloadProgress: null,
 };
 
 function normalizePriority(priority) {
@@ -1064,19 +1071,92 @@ function syncWebdavSettingsForm() {
   if (mergeWebdavBtn) mergeWebdavBtn.disabled = !syncReady;
 }
 
+function formatDownloadBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+function formatDownloadSpeed(downloadedBytes, elapsedMs) {
+  if (!downloadedBytes || !elapsedMs) return "";
+  return `${formatDownloadBytes((downloadedBytes / elapsedMs) * 1000)}/s`;
+}
+
+function getUpdateProgressLabel(stage) {
+  const labels = {
+    checking: "正在检查版本",
+    connecting: "正在连接下载",
+    downloading: "正在下载",
+    downloaded: "下载完成，正在准备打开",
+    opening: "正在打开安装包",
+    done: "下载完成",
+    error: "下载失败",
+  };
+  return labels[stage] || "正在下载";
+}
+
+function syncUpdateDownloadProgress() {
+  const progress = state.updateDownloadProgress;
+  if (!updateProgressPanel || !progress) return;
+
+  const totalBytes = Number(progress.totalBytes) || Number(state.updateInfo?.assetSize) || 0;
+  const downloadedBytes = Number(progress.downloadedBytes) || 0;
+  const hasTotal = totalBytes > 0;
+  const percent = progress.stage === "done"
+    ? 100
+    : hasTotal
+      ? Math.min(100, Math.max(0, Math.round((downloadedBytes / totalBytes) * 100)))
+      : 0;
+  const speed = formatDownloadSpeed(downloadedBytes, Number(progress.elapsedMs) || 0);
+  const sizeText = hasTotal
+    ? `${formatDownloadBytes(downloadedBytes)} / ${formatDownloadBytes(totalBytes)}`
+    : downloadedBytes
+      ? `已下载 ${formatDownloadBytes(downloadedBytes)}`
+      : "等待数据";
+
+  updateProgressPanel.classList.remove("hidden");
+  updateProgressTrack?.classList.toggle("is-indeterminate", !hasTotal && progress.stage === "downloading");
+  if (updateProgressTrack) updateProgressTrack.setAttribute("aria-valuenow", String(percent));
+  if (updateProgressBar) updateProgressBar.style.width = hasTotal || progress.stage === "done" ? `${percent}%` : "42%";
+  if (updateProgressPercent) updateProgressPercent.textContent = hasTotal || progress.stage === "done" ? `${percent}%` : "--";
+  if (updateProgressMeta) updateProgressMeta.textContent = speed ? `${sizeText} · ${speed}` : sizeText;
+  if (updateProgressFile) updateProgressFile.textContent = progress.filePath || state.updateInfo?.assetName || "--";
+  if (updateStatusText && state.updateDownloading) {
+    updateStatusText.textContent = getUpdateProgressLabel(progress.stage);
+  }
+}
+
 function syncUpdateSettings() {
   const currentVersion = state.appInfo?.version || "";
   const latestVersion = state.updateInfo?.latestVersion || "";
   const updateAvailable = Boolean(state.updateInfo?.updateAvailable);
   if (currentVersionText) currentVersionText.textContent = currentVersion ? `v${currentVersion}` : "--";
   if (latestVersionText) latestVersionText.textContent = latestVersion ? `v${latestVersion}` : "--";
-  if (downloadUpdateBtn) downloadUpdateBtn.disabled = !updateAvailable || !state.updateInfo?.assetUrl;
+  if (downloadUpdateBtn) downloadUpdateBtn.disabled = state.updateDownloading || !updateAvailable || !state.updateInfo?.assetUrl;
   if (updateStatusPill) {
-    updateStatusPill.textContent = updateAvailable ? "有新版" : latestVersion ? "已是最新" : "未检查";
-    updateStatusPill.classList.toggle("is-live", updateAvailable);
+    const progressStage = state.updateDownloadProgress?.stage || "";
+    const failed = progressStage === "error";
+    updateStatusPill.textContent = state.updateDownloading
+      ? "下载中"
+      : failed
+        ? "下载失败"
+        : progressStage === "done"
+          ? "已下载"
+          : updateAvailable
+            ? "有新版"
+            : latestVersion
+              ? "已是最新"
+              : "未检查";
+    updateStatusPill.classList.toggle("is-live", (updateAvailable || progressStage === "done") && !state.updateDownloading && !failed);
+    updateStatusPill.classList.toggle("is-busy", Boolean(state.updateDownloading));
+    updateStatusPill.classList.toggle("is-error", failed);
   }
   if (updateStatusText && !state.updateChecking && !state.updateDownloading) {
-    if (updateAvailable) {
+    if (state.updateDownloadProgress?.stage === "done") {
+      updateStatusText.textContent = `安装包已下载：${state.updateDownloadProgress.filePath || ""}`;
+    } else if (updateAvailable) {
       updateStatusText.textContent = `发现新版本 v${latestVersion}，可下载并打开安装包。`;
     } else if (latestVersion) {
       updateStatusText.textContent = "当前已经是最新版本。";
@@ -1086,9 +1166,10 @@ function syncUpdateSettings() {
   }
   if (updateAssetText) {
     updateAssetText.textContent = state.updateInfo?.assetName
-      ? `将下载：${state.updateInfo.assetName}`
+      ? `将下载：${state.updateInfo.assetName}${state.updateInfo.assetSize ? `（${formatDownloadBytes(state.updateInfo.assetSize)}）` : ""}`
       : "发现新版后，会自动选择当前系统对应的安装包。";
   }
+  syncUpdateDownloadProgress();
 }
 
 async function refreshAppInfo() {
@@ -1137,14 +1218,21 @@ async function downloadAppUpdate() {
     if (!hasUpdate) return;
   }
   state.updateDownloading = true;
+  state.updateDownloadProgress = {
+    stage: "checking",
+    downloadedBytes: 0,
+    totalBytes: Number(state.updateInfo?.assetSize) || 0,
+  };
   if (downloadUpdateBtn) {
     downloadUpdateBtn.disabled = true;
     downloadUpdateBtn.textContent = "下载中";
   }
   if (updateStatusText) updateStatusText.textContent = "正在下载安装包，完成后会自动打开。";
+  syncUpdateSettings();
   try {
     const result = await window.vault?.downloadUpdate?.();
     if (!result?.ok) {
+      state.updateDownloadProgress = { stage: "error", error: result?.error || "下载更新失败" };
       showToast(result?.error || "下载更新失败");
       if (updateStatusText) updateStatusText.textContent = result?.error || "下载更新失败";
       syncUpdateSettings();
@@ -3153,6 +3241,14 @@ window.vault?.onClearAuth?.(() => {
   clearSensitiveInputs();
   refreshRecoveryStatus();
   refreshDataKeyStatus();
+});
+
+window.vault?.onUpdateDownloadProgress?.((progress) => {
+  state.updateDownloadProgress = {
+    ...state.updateDownloadProgress,
+    ...progress,
+  };
+  syncUpdateSettings();
 });
 
 window.vault?.onStatus?.((status) => {

@@ -2,7 +2,7 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, safeStorage, shell, systemPre
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { Readable } = require("node:stream");
+const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 
 let loginWindow = null;
@@ -1139,6 +1139,7 @@ function normalizeReleaseInfo(release) {
     notes: release?.body || "",
     assetName: asset?.name || "",
     assetUrl: asset?.browser_download_url || "",
+    assetSize: Number(asset?.size) || 0,
     platform: process.platform,
     arch: process.arch,
   };
@@ -1151,11 +1152,12 @@ function safeDownloadName(name) {
     .slice(0, 160);
 }
 
-async function downloadReleaseAsset(assetUrl, assetName) {
+async function downloadReleaseAsset(assetUrl, assetName, assetSize = 0, onProgress = () => {}) {
   const parsed = new URL(String(assetUrl || ""));
   if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
     return { ok: false, error: "更新下载地址无效" };
   }
+  onProgress({ stage: "connecting", downloadedBytes: 0, totalBytes: Number(assetSize) || 0 });
   const response = await fetch(parsed.href, {
     headers: {
       "User-Agent": "Coco-Dense-Updater",
@@ -1165,7 +1167,34 @@ async function downloadReleaseAsset(assetUrl, assetName) {
     return { ok: false, error: `下载更新失败：${response.status}` };
   }
   const filePath = path.join(app.getPath("downloads"), safeDownloadName(assetName));
-  await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(filePath));
+  const totalBytes = Number(response.headers.get("content-length")) || Number(assetSize) || 0;
+  let downloadedBytes = 0;
+  let lastProgressAt = 0;
+  const startedAt = Date.now();
+  const progressStream = new Transform({
+    transform(chunk, _encoding, callback) {
+      downloadedBytes += chunk.length;
+      const now = Date.now();
+      if (now - lastProgressAt > 120 || (totalBytes && downloadedBytes >= totalBytes)) {
+        lastProgressAt = now;
+        onProgress({
+          stage: "downloading",
+          downloadedBytes,
+          totalBytes,
+          elapsedMs: now - startedAt,
+        });
+      }
+      callback(null, chunk);
+    },
+  });
+  await pipeline(Readable.fromWeb(response.body), progressStream, fs.createWriteStream(filePath));
+  onProgress({
+    stage: "downloaded",
+    downloadedBytes,
+    totalBytes,
+    elapsedMs: Date.now() - startedAt,
+    filePath,
+  });
   return { ok: true, filePath };
 }
 
@@ -1538,8 +1567,12 @@ function wireWindowControls() {
       return { ok: false, error: error?.message || "检查更新失败" };
     }
   });
-  ipcMain.handle("update:download", async () => {
+  ipcMain.handle("update:download", async (event) => {
+    const sendDownloadProgress = (progress) => {
+      event.sender.send("update:downloadProgress", progress);
+    };
     try {
+      sendDownloadProgress({ stage: "checking", downloadedBytes: 0, totalBytes: 0 });
       const latest = await fetchLatestRelease();
       if (!latest.ok) return latest;
       const info = normalizeReleaseInfo(latest.release);
@@ -1549,15 +1582,41 @@ function wireWindowControls() {
       if (!info.assetUrl) {
         return { ok: false, ...info, error: "没有找到适合当前系统的安装包" };
       }
-      const downloaded = await downloadReleaseAsset(info.assetUrl, info.assetName);
+      const downloaded = await downloadReleaseAsset(
+        info.assetUrl,
+        info.assetName,
+        info.assetSize,
+        sendDownloadProgress,
+      );
       if (!downloaded.ok) return { ...downloaded, ...info };
+      sendDownloadProgress({
+        stage: "opening",
+        downloadedBytes: info.assetSize,
+        totalBytes: info.assetSize,
+        filePath: downloaded.filePath,
+      });
       const openError = await shell.openPath(downloaded.filePath);
       if (openError) {
         shell.showItemInFolder(downloaded.filePath);
+        sendDownloadProgress({
+          stage: "done",
+          opened: false,
+          downloadedBytes: info.assetSize,
+          totalBytes: info.assetSize,
+          filePath: downloaded.filePath,
+        });
         return { ok: true, ...info, filePath: downloaded.filePath, opened: false, error: openError };
       }
+      sendDownloadProgress({
+        stage: "done",
+        opened: true,
+        downloadedBytes: info.assetSize,
+        totalBytes: info.assetSize,
+        filePath: downloaded.filePath,
+      });
       return { ok: true, ...info, filePath: downloaded.filePath, opened: true };
     } catch (error) {
+      sendDownloadProgress({ stage: "error", error: error?.message || "下载更新失败" });
       return { ok: false, error: error?.message || "下载更新失败" };
     }
   });
