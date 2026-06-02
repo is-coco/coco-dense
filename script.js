@@ -44,6 +44,9 @@ const settingsSectionTitle = document.getElementById("settingsSectionTitle");
 const settingsSectionHint = document.getElementById("settingsSectionHint");
 const detailModeLabel = document.getElementById("detailModeLabel");
 const entryContextMenu = document.getElementById("entryContextMenu");
+const folderContextMenu = document.getElementById("folderContextMenu");
+const sidebarContextMenu = document.getElementById("sidebarContextMenu");
+const entryFolderMoveList = document.getElementById("entryFolderMoveList");
 const siteValue = document.getElementById("siteValue");
 const urlValue = document.getElementById("urlValue");
 const accountValue = document.getElementById("accountValue");
@@ -82,6 +85,9 @@ const forgotPasswordHelper = document.getElementById("forgotPasswordHelper");
 const forgotPasswordUnavailable = document.getElementById("forgotPasswordUnavailable");
 const forgotQuestion1 = document.getElementById("forgotQuestion1");
 const forgotAnswer1 = document.getElementById("forgotAnswer1");
+const forgotAnswerField = document.getElementById("forgotAnswerField");
+const forgotDataKeyField = document.getElementById("forgotDataKeyField");
+const forgotDataKeyInput = document.getElementById("forgotDataKeyInput");
 const forgotPasswordError = document.getElementById("forgotPasswordError");
 const closeForgotPasswordBtn = document.getElementById("closeForgotPasswordBtn");
 const cancelForgotPasswordBtn = document.getElementById("cancelForgotPasswordBtn");
@@ -208,7 +214,10 @@ const state = {
     copyConfirm: true,
     welcomeOnStart: true,
     backupBeforeExport: true,
+    folders: [],
   },
+  folderUi: loadFolderUiState(),
+  folderToggleAt: {},
   autoLockTimer: null,
   clipboardTimer: null,
   cloudCheckTimer: null,
@@ -232,7 +241,9 @@ const state = {
   activePriority: "green",
   tagInputFocused: false,
   contextEntryId: "",
+  contextFolderId: "",
   renamingEntryId: "",
+  renamingFolderId: "",
   recoveryStatus: {
     configured: false,
     corrupted: false,
@@ -387,6 +398,20 @@ function normalizeSettings(settings = {}) {
   const clipboardSecondsValue = Number(settings.clipboardClearSeconds);
   const cloudCheckMinutesValue = Number(settings.cloudCheckMinutes);
   const passwordLengthValue = Number(settings.passwordLength);
+  const seenFolders = new Set();
+  const folders = Array.isArray(settings.folders)
+    ? settings.folders
+      .map((folder) => ({
+        id: String(folder?.id || "").trim(),
+        name: String(folder?.name || "").trim(),
+        priority: normalizePriority(folder?.priority),
+      }))
+      .filter((folder) => {
+        if (!folder.id || !folder.name || seenFolders.has(folder.id)) return false;
+        seenFolders.add(folder.id);
+        return true;
+      })
+    : [];
   return {
     autoLockMinutes: Number.isFinite(autoLockMinutesValue) ? autoLockMinutesValue : 5,
     clipboardClearSeconds: Number.isFinite(clipboardSecondsValue) ? clipboardSecondsValue : 30,
@@ -395,6 +420,7 @@ function normalizeSettings(settings = {}) {
     copyConfirm: settings.copyConfirm !== false,
     welcomeOnStart: settings.welcomeOnStart !== false,
     backupBeforeExport: settings.backupBeforeExport !== false,
+    folders,
   };
 }
 
@@ -408,6 +434,7 @@ function normalizeEntry(entry) {
     url: entry?.url || "",
     tags: entry?.tags || "",
     notes: entry?.notes || "",
+    folderId: String(entry?.folderId || ""),
     favorite: Boolean(entry?.favorite),
     pinned: Boolean(entry?.pinned),
     priority,
@@ -477,10 +504,10 @@ function clearSensitiveInputs() {
   confirmMasterPassword.value = "";
   entryPasswordInput.value = "";
   forgotAnswer1.value = "";
+  if (forgotDataKeyInput) forgotDataKeyInput.value = "";
   recoveryAnswer1.value = "";
   masterPassword.type = "password";
   entryPasswordInput.type = "password";
-  forgotAnswer1.type = "password";
   togglePassword.setAttribute("aria-pressed", "false");
   toggleEntryPassword.setAttribute("aria-pressed", "false");
   togglePassword.querySelector(".toggle-icon-show")?.classList.remove("hidden");
@@ -510,13 +537,23 @@ function getVisibleEntries() {
 function copyToClipboard(text, successMessage) {
   const value = String(text ?? "");
   if (window.vault?.copyText) {
-    return window.vault
-      .copyText(value)
-      .then(() => {
-        showToast(successMessage);
-        clearClipboardLater();
-      })
-      .catch(() => showToast("复制失败"));
+    try {
+      const result = window.vault.copyText(value);
+      if (result?.then) {
+        return result
+          .then(() => {
+            showToast(successMessage);
+            clearClipboardLater();
+          })
+          .catch(() => showToast("复制失败"));
+      }
+      showToast(successMessage);
+      clearClipboardLater();
+      return Promise.resolve(true);
+    } catch {
+      showToast("复制失败");
+      return Promise.resolve(false);
+    }
   }
   return navigator.clipboard
     .writeText(value)
@@ -1693,6 +1730,7 @@ function openForgotPasswordModal() {
     showToast("本地保险箱损坏，无法找回");
     return;
   }
+  forgotPasswordForm?.reset();
   forgotPasswordError.textContent = "";
   forgotPasswordError.classList.add("hidden");
   forgotPasswordForm.classList.toggle("hidden", !state.recoveryStatus.configured);
@@ -1700,6 +1738,7 @@ function openForgotPasswordModal() {
   if (state.recoveryStatus.configured) {
     forgotQuestion1.textContent = state.recoveryStatus.questions?.[0] || "安全问题";
   }
+  setForgotRecoveryStep("answer");
   forgotPasswordModal.classList.remove("hidden");
   forgotPasswordModal.setAttribute("aria-hidden", "false");
   (state.recoveryStatus.configured ? forgotAnswer1 : closeForgotPasswordBtn).focus({ preventScroll: true });
@@ -1709,6 +1748,8 @@ function closeForgotPasswordModal() {
   forgotPasswordModal.classList.add("hidden");
   forgotPasswordModal.setAttribute("aria-hidden", "true");
   forgotPasswordForm.reset();
+  if (forgotDataKeyInput) forgotDataKeyInput.value = "";
+  setForgotRecoveryStep("answer");
   forgotPasswordError.textContent = "";
   forgotPasswordError.classList.add("hidden");
 }
@@ -1716,6 +1757,24 @@ function closeForgotPasswordModal() {
 function showForgotPasswordError(message) {
   forgotPasswordError.textContent = message;
   forgotPasswordError.classList.remove("hidden");
+}
+
+function setForgotRecoveryStep(step = "answer") {
+  const needsDataKey = step === "data-key";
+  if (forgotPasswordForm) {
+    forgotPasswordForm.dataset.recoveryStep = needsDataKey ? "data-key" : "answer";
+  }
+  forgotAnswerField?.classList.toggle("hidden", needsDataKey);
+  forgotDataKeyField?.classList.toggle("hidden", !needsDataKey);
+  if (forgotPasswordHelper) {
+    forgotPasswordHelper.classList.toggle("is-alert", needsDataKey);
+    forgotPasswordHelper.textContent = needsDataKey
+      ? "重要提醒：安全问题已验证，仍需输入数据钥匙才能解锁。"
+      : "先验证你设置过的安全问题答案。";
+  }
+  if (submitForgotPasswordBtn) {
+    submitForgotPasswordBtn.textContent = "解锁";
+  }
 }
 
 function openRecoverySettingsModal() {
@@ -1780,6 +1839,149 @@ function sortEntries(entries) {
   });
 }
 
+function loadFolderUiState() {
+  try {
+    const raw = window.localStorage?.getItem("coco-dense-folder-ui") || "";
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object") return {};
+    const next = {};
+    Object.entries(parsed).forEach(([folderId, value]) => {
+      if (folderId) {
+        next[folderId] = {
+          collapsed: Boolean(value?.collapsed),
+        };
+      }
+    });
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function saveFolderUiState() {
+  try {
+    window.localStorage?.setItem("coco-dense-folder-ui", JSON.stringify(state.folderUi || {}));
+  } catch {
+    // ignore local persistence errors
+  }
+}
+
+function getFolders() {
+  return Array.isArray(state.settings?.folders) ? state.settings.folders : [];
+}
+
+function getFolder(folderId) {
+  return getFolders().find((folder) => folder.id === folderId) || null;
+}
+
+function sortFolders(folders = getFolders()) {
+  return [...folders].sort((a, b) => {
+    const priorityDelta = priorityScore(normalizePriority(b.priority)) - priorityScore(normalizePriority(a.priority));
+    if (priorityDelta !== 0) return priorityDelta;
+    return String(a.name || "").localeCompare(String(b.name || ""), "zh-CN", {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
+}
+
+function isValidFolderId(folderId) {
+  return Boolean(folderId && getFolder(folderId));
+}
+
+function getEntryFolderId(entry) {
+  return isValidFolderId(entry?.folderId) ? entry.folderId : "";
+}
+
+function getFolderName(folderId) {
+  return folderId ? getFolder(folderId)?.name || "文件夹" : "未分组";
+}
+
+function getFolderPriority(folderId) {
+  return normalizePriority(getFolder(folderId)?.priority);
+}
+
+function makeFolderId(name) {
+  const base = String(name || "folder")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24) || "folder";
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+function getFolderEntryCount(folderId, entries = getVisibleEntries()) {
+  return entries.filter((entry) => getEntryFolderId(entry) === folderId).length;
+}
+
+function getFolderCollapsed(folderId) {
+  return Boolean(state.folderUi?.[folderId]?.collapsed);
+}
+
+function setFolderCollapsed(folderId, collapsed) {
+  if (!folderId) return;
+  state.folderUi = {
+    ...state.folderUi,
+    [folderId]: {
+      ...state.folderUi?.[folderId],
+      collapsed: Boolean(collapsed),
+    },
+  };
+  saveFolderUiState();
+}
+
+function reconcileFolderUiState() {
+  const next = {};
+  getFolders().forEach((folder) => {
+    next[folder.id] = {
+      collapsed: Boolean(state.folderUi?.[folder.id]?.collapsed),
+    };
+  });
+  state.folderUi = next;
+  saveFolderUiState();
+}
+
+function findFolderByName(name, excludeId = "") {
+  const needle = String(name || "").trim().toLocaleLowerCase("zh-CN");
+  if (!needle) return null;
+  return getFolders().find((folder) => {
+    if (excludeId && folder.id === excludeId) return false;
+    return String(folder.name || "").trim().toLocaleLowerCase("zh-CN") === needle;
+  }) || null;
+}
+
+function getNextFolderName() {
+  let index = 1;
+  while (findFolderByName(`分组${index}`)) {
+    index += 1;
+  }
+  return `分组${index}`;
+}
+
+function markFolderToggle(folderId) {
+  const now = Date.now();
+  const lastAt = Number(state.folderToggleAt?.[folderId] || 0);
+  if (now - lastAt < 220) return false;
+  state.folderToggleAt = {
+    ...state.folderToggleAt,
+    [folderId]: now,
+  };
+  return true;
+}
+
+async function setFolderPriority(folderId, priority) {
+  if (!folderId) return;
+  const nextPriority = normalizePriority(priority);
+  state.settings = normalizeSettings({
+    ...state.settings,
+    folders: getFolders().map((folder) =>
+      folder.id === folderId ? { ...folder, priority: nextPriority } : folder,
+    ),
+  });
+  renderEntries();
+  await persistVault();
+}
+
 function applyPriority(priority) {
   state.activePriority = Object.hasOwn(PRIORITY_ORDER, priority) ? priority : "green";
   syncPriorityPicker();
@@ -1792,31 +1994,96 @@ function hideEntryContextMenu() {
   state.contextEntryId = "";
 }
 
-function placeEntryContextMenu(x, y) {
-  if (!entryContextMenu) return;
-  entryContextMenu.classList.remove("hidden");
-  entryContextMenu.setAttribute("aria-hidden", "false");
-  const rect = entryContextMenu.getBoundingClientRect();
+function hideFolderContextMenu() {
+  if (!folderContextMenu) return;
+  folderContextMenu.classList.add("hidden");
+  folderContextMenu.setAttribute("aria-hidden", "true");
+  state.contextFolderId = "";
+}
+
+function hideSidebarContextMenu() {
+  if (!sidebarContextMenu) return;
+  sidebarContextMenu.classList.add("hidden");
+  sidebarContextMenu.setAttribute("aria-hidden", "true");
+}
+
+function placeContextMenu(menu, x, y) {
+  if (!menu) return;
+  menu.classList.remove("hidden");
+  menu.setAttribute("aria-hidden", "false");
+  const rect = menu.getBoundingClientRect();
   const margin = 10;
   const left = Math.min(x, window.innerWidth - rect.width - margin);
   const top = Math.min(y, window.innerHeight - rect.height - margin);
-  entryContextMenu.style.left = `${Math.max(margin, left)}px`;
-  entryContextMenu.style.top = `${Math.max(margin, top)}px`;
+  menu.style.left = `${Math.max(margin, left)}px`;
+  menu.style.top = `${Math.max(margin, top)}px`;
+}
+
+function placeEntryContextMenu(x, y) {
+  placeContextMenu(entryContextMenu, x, y);
+}
+
+function syncEntryFolderMenu(entry) {
+  if (!entryFolderMoveList) return;
+  entryFolderMoveList.innerHTML = "";
+  const currentFolderId = getEntryFolderId(entry);
+  const options = [{ id: "", name: "移出分组" }, ...getFolders()];
+  options.forEach((folder) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.menuAction = "move-folder";
+    button.dataset.folderId = folder.id;
+    if (!folder.id) {
+      button.textContent = currentFolderId ? "移出当前分组" : "当前未分组";
+    } else {
+      button.textContent = currentFolderId === folder.id ? `已在${folder.name}` : `移到${folder.name}`;
+    }
+    button.disabled = currentFolderId === folder.id;
+    entryFolderMoveList.appendChild(button);
+  });
 }
 
 function showEntryContextMenu(event, entry) {
   if (!entryContextMenu || !entry) return;
   event.preventDefault();
   event.stopPropagation();
+  hideFolderContextMenu();
+  hideSidebarContextMenu();
   state.contextEntryId = entry.id;
   setActiveEntry(entry.id);
 
   const pinLabel = entryContextMenu.querySelector('[data-menu-action="toggle-pin"] .menu-label');
   if (pinLabel) pinLabel.textContent = entry.pinned ? "取消置顶" : "置顶";
+  const favoriteLabel = entryContextMenu.querySelector('[data-menu-action="toggle-favorite"] .menu-label');
+  if (favoriteLabel) favoriteLabel.textContent = entry.favorite ? "取消收藏" : "收藏";
+  syncEntryFolderMenu(entry);
   entryContextMenu.querySelectorAll("[data-priority]").forEach((button) => {
     button.classList.toggle("active", button.dataset.priority === normalizePriority(entry.priority));
   });
   placeEntryContextMenu(event.clientX, event.clientY);
+}
+
+function showFolderContextMenu(event, folderId) {
+  if (!folderContextMenu || !folderId) return;
+  event.preventDefault();
+  event.stopPropagation();
+  hideEntryContextMenu();
+  hideSidebarContextMenu();
+  state.contextFolderId = folderId;
+  const priority = getFolderPriority(folderId);
+  folderContextMenu.querySelectorAll("[data-folder-priority]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.folderPriority === priority);
+  });
+  placeContextMenu(folderContextMenu, event.clientX, event.clientY);
+}
+
+function showSidebarContextMenu(event) {
+  if (!sidebarContextMenu) return;
+  event.preventDefault();
+  event.stopPropagation();
+  hideEntryContextMenu();
+  hideFolderContextMenu();
+  placeContextMenu(sidebarContextMenu, event.clientX, event.clientY);
 }
 
 async function persistContextEntry(message = "已更新") {
@@ -1828,7 +2095,7 @@ async function persistContextEntry(message = "已更新") {
     fillForm(entry);
   }
   if (await persistVault()) {
-    showToast(message);
+    if (message) showToast(message);
   }
 }
 
@@ -1872,6 +2139,138 @@ async function commitInlineRename(input, options = {}) {
   entry.site = nextName;
   entry.updatedAt = new Date().toISOString();
   await persistContextEntry("名称已修改");
+}
+
+async function createFolderForEntry(entry) {
+  if (!entry) return;
+  const folder = await createFolder({
+    assignEntryId: entry.id,
+    defaultName: getNextFolderName(),
+  });
+  if (!folder) return;
+  hideEntryContextMenu();
+}
+
+async function createFolder(options = {}) {
+  const assignEntryId = options.assignEntryId || "";
+  const defaultName = String(options.defaultName || getNextFolderName()).trim() || getNextFolderName();
+  const targetEntry = assignEntryId
+    ? state.entries.find((entry) => entry.id === assignEntryId && !entry.deletedAt) || null
+    : null;
+  const folder = {
+    id: makeFolderId(defaultName),
+    name: defaultName,
+    priority: "green",
+  };
+  state.settings = normalizeSettings({
+    ...state.settings,
+    folders: [...getFolders(), folder],
+  });
+  if (targetEntry) {
+    targetEntry.folderId = folder.id;
+    targetEntry.updatedAt = new Date().toISOString();
+  }
+  state.renamingFolderId = folder.id;
+  setFolderCollapsed(folder.id, false);
+  renderEntries();
+  await persistVault();
+  requestAnimationFrame(() => {
+    const input = vaultList.querySelector(`[data-folder-rename-input="${CSS.escape(folder.id)}"]`);
+    if (!input) return;
+    input.focus({ preventScroll: true });
+    const length = input.value.length;
+    if (typeof input.setSelectionRange === "function") {
+      input.setSelectionRange(length, length);
+    }
+  });
+  return folder;
+}
+
+async function moveEntryToFolder(entry, folderId) {
+  if (!entry) return;
+  const nextFolderId = isValidFolderId(folderId) ? folderId : "";
+  entry.folderId = nextFolderId;
+  entry.updatedAt = new Date().toISOString();
+  hideEntryContextMenu();
+  await persistContextEntry("");
+}
+
+function renameContextFolder(folderId) {
+  const folder = getFolder(folderId);
+  if (!folder) return;
+  state.renamingFolderId = folder.id;
+  renderEntries();
+  requestAnimationFrame(() => {
+    const input = vaultList.querySelector(`[data-folder-rename-input="${CSS.escape(folder.id)}"]`);
+    if (!input) return;
+    input.focus({ preventScroll: true });
+    const length = input.value.length;
+    if (typeof input.setSelectionRange === "function") {
+      input.setSelectionRange(length, length);
+    }
+  });
+}
+
+async function commitFolderRename(input, options = {}) {
+  const folderId = input?.dataset.folderRenameInput;
+  if (!folderId || state.renamingFolderId !== folderId) return;
+  const nextName = input.value.trim();
+
+  state.renamingFolderId = "";
+  if (options.cancel) {
+    renderEntries();
+    return;
+  }
+  if (!nextName) {
+    renderEntries();
+    return;
+  }
+  if (findFolderByName(nextName, folderId)) {
+    renderEntries();
+    return;
+  }
+
+  const folder = getFolder(folderId);
+  if (!folder) {
+    renderEntries();
+    return;
+  }
+  if (nextName === folder.name) {
+    renderEntries();
+    return;
+  }
+
+  state.settings = normalizeSettings({
+    ...state.settings,
+    folders: getFolders().map((item) =>
+      item.id === folderId ? { ...item, name: nextName } : item,
+    ),
+  });
+  renderEntries();
+  await persistVault();
+}
+
+async function deleteContextFolder(folderId) {
+  const folder = getFolder(folderId);
+  if (!folder) return;
+  state.settings = normalizeSettings({
+    ...state.settings,
+    folders: getFolders().filter((item) => item.id !== folderId),
+  });
+  if (state.folderUi?.[folderId]) {
+    const nextFolderUi = { ...state.folderUi };
+    delete nextFolderUi[folderId];
+    state.folderUi = nextFolderUi;
+    saveFolderUiState();
+  }
+  state.entries = state.entries.map((entry) =>
+    entry.folderId === folderId
+      ? { ...entry, folderId: "", updatedAt: new Date().toISOString() }
+      : entry,
+  );
+  hideFolderContextMenu();
+  renderEntries();
+  await persistVault();
 }
 
 function syncPasswordStrength() {
@@ -2059,18 +2458,33 @@ async function saveRecoverySettings(event) {
 
 async function recoverAndUnlock(event) {
   event?.preventDefault();
+  const step = forgotPasswordForm?.dataset.recoveryStep || "answer";
   const answers = [forgotAnswer1.value];
-  if (!answers[0].trim()) {
-    showForgotPasswordError("请填写答案");
+  const dataKey = forgotDataKeyInput?.value.trim() || "";
+  if (step === "answer") {
+    if (!answers[0].trim()) {
+      showForgotPasswordError("请填写答案");
+      return;
+    }
+  } else if (!dataKey) {
+    showForgotPasswordError("请输入数据钥匙");
+    forgotDataKeyInput?.focus();
     return;
   }
 
   submitForgotPasswordBtn.disabled = true;
-  submitForgotPasswordBtn.textContent = "正在验证";
-  const result = await window.vault?.recoverWithAnswers?.(answers);
+  submitForgotPasswordBtn.textContent = "解锁中";
+  const result = await window.vault?.recoverWithAnswers?.(answers, dataKey);
   submitForgotPasswordBtn.disabled = false;
-  submitForgotPasswordBtn.textContent = "验证并解锁";
+  submitForgotPasswordBtn.textContent = "解锁";
   if (!result?.ok) {
+    if (result?.needsDataKey) {
+      forgotPasswordError.textContent = "";
+      forgotPasswordError.classList.add("hidden");
+      setForgotRecoveryStep("data-key");
+      requestAnimationFrame(() => forgotDataKeyInput?.focus({ preventScroll: true }));
+      return;
+    }
     showForgotPasswordError(result?.error || "验证失败");
     return;
   }
@@ -2271,6 +2685,7 @@ function loadVaultPayload(payload, options = {}) {
   }
   state.entries = Array.isArray(payload?.entries) ? payload.entries.map(normalizeEntry) : [];
   state.settings = normalizeSettings(payload?.settings);
+  reconcileFolderUiState();
   state.vaultMeta = {
     createdAt: payload?.createdAt || new Date().toISOString(),
     updatedAt: payload?.updatedAt || new Date().toISOString(),
@@ -2318,6 +2733,164 @@ async function initAuthState() {
   refreshStatusText();
 }
 
+function shouldShowEmptyFolders(query) {
+  return !query && !state.activeTagFilter && !state.activePriorityFilter && state.activeFilter === "全部";
+}
+
+function createEntryNode(entry) {
+  const priority = normalizePriority(entry.priority);
+  const isRenaming = state.renamingEntryId === entry.id;
+  const isNested = Boolean(getEntryFolderId(entry));
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `vault-item${entry.id === state.activeId ? " active" : ""}${isNested ? " vault-item-nested" : ""}`;
+  button.setAttribute("role", "listitem");
+  button.dataset.entry = entry.id;
+  const row = document.createElement("div");
+  row.className = "vault-item-row";
+
+  const dot = document.createElement("span");
+  dot.className = `priority-dot ${priority}`;
+
+  const itemMain = document.createElement("div");
+  itemMain.className = "item-main";
+
+  if (isRenaming) {
+    const renameInput = document.createElement("input");
+    renameInput.className = "rename-input";
+    renameInput.dataset.renameInput = entry.id;
+    renameInput.value = entry.site || "";
+    renameInput.setAttribute("aria-label", "修改名称");
+    itemMain.appendChild(renameInput);
+  } else {
+    const strong = document.createElement("strong");
+    strong.textContent = entry.site || "";
+    itemMain.appendChild(strong);
+  }
+
+  const tags = document.createElement("span");
+  tags.textContent = formatEntryTagLine(entry.tags);
+  itemMain.appendChild(tags);
+
+  row.append(dot, itemMain);
+  button.append(row);
+  button.addEventListener("click", () => {
+    if (state.renamingEntryId) return;
+    setActiveEntry(entry.id);
+  });
+  button.addEventListener("contextmenu", (event) => {
+    showEntryContextMenu(event, entry);
+  });
+  const renameInput = button.querySelector(".rename-input");
+  renameInput?.addEventListener("click", (event) => event.stopPropagation());
+  renameInput?.addEventListener("pointerdown", (event) => event.stopPropagation());
+  renameInput?.addEventListener("blur", () => {
+    commitInlineRename(renameInput);
+  });
+  renameInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      renameInput.blur();
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      commitInlineRename(renameInput, { cancel: true });
+    }
+  });
+  return button;
+}
+
+function createFolderNode(folder, entries) {
+  const folderId = folder?.id || "";
+  if (!folderId) return null;
+  const isCollapsed = getFolderCollapsed(folderId);
+  const isRenaming = state.renamingFolderId === folderId;
+  const wrapper = document.createElement("div");
+  wrapper.className = `folder-item${isCollapsed ? " collapsed" : ""}`;
+  wrapper.dataset.folder = folderId;
+  wrapper.setAttribute("role", "listitem");
+  wrapper.setAttribute("aria-expanded", String(!isCollapsed));
+
+  const row = document.createElement("div");
+  row.className = "folder-toggle";
+
+  const chevron = document.createElement("span");
+  chevron.className = "folder-chevron";
+  chevron.textContent = "›";
+
+  const priority = document.createElement("span");
+  priority.className = `priority-dot ${normalizePriority(folder.priority)}`;
+  priority.setAttribute("aria-hidden", "true");
+
+  const main = document.createElement("span");
+  main.className = "folder-main";
+
+  const nameWrap = document.createElement("span");
+  nameWrap.className = "folder-name-wrap";
+
+  if (isRenaming) {
+    const input = document.createElement("input");
+    input.className = "folder-rename-input";
+    input.dataset.folderRenameInput = folderId;
+    input.value = folder.name || "";
+    input.setAttribute("aria-label", "修改文件夹名");
+    nameWrap.appendChild(input);
+  } else {
+    const name = document.createElement("strong");
+    name.textContent = folder.name;
+    nameWrap.appendChild(name);
+  }
+
+  const count = document.createElement("small");
+  count.className = "folder-count";
+  count.textContent = `${entries.length}`;
+  main.append(nameWrap, count);
+
+  row.append(chevron, priority, main);
+  wrapper.appendChild(row);
+
+  const menuButton = document.createElement("button");
+  menuButton.type = "button";
+  menuButton.className = "folder-menu-btn";
+  menuButton.setAttribute("aria-label", `${folder.name} 菜单`);
+  menuButton.textContent = "⋯";
+  menuButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showFolderContextMenu(event, folderId);
+  });
+  wrapper.appendChild(menuButton);
+
+  const toggleFolder = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (state.renamingFolderId) return;
+    if (!markFolderToggle(folderId)) return;
+    setFolderCollapsed(folderId, !isCollapsed);
+    renderEntries();
+    touchActivity();
+  };
+  row.addEventListener("click", toggleFolder);
+  wrapper.addEventListener("contextmenu", (event) => {
+    showFolderContextMenu(event, folderId);
+  });
+
+  const input = wrapper.querySelector(".folder-rename-input");
+  input?.addEventListener("click", (event) => event.stopPropagation());
+  input?.addEventListener("pointerdown", (event) => event.stopPropagation());
+  input?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitFolderRename(input);
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      commitFolderRename(input, { cancel: true });
+    }
+  });
+  return wrapper;
+}
+
 function renderEntries() {
   syncSidebarFilters();
   const query = searchInput.value.trim().toLowerCase();
@@ -2332,72 +2905,37 @@ function renderEntries() {
     return haystack.includes(query) || (queryInitials && haystack.includes(queryInitials));
   }));
 
-  vaultList.querySelectorAll("[data-entry]").forEach((node) => node.remove());
+  vaultList.querySelectorAll("[data-entry], [data-folder]").forEach((node) => node.remove());
+  let renderedGroupCount = 0;
 
-  emptyState.classList.toggle("hidden", filtered.length > 0);
-
+  const groups = new Map();
+  getFolders().forEach((folder) => groups.set(folder.id, []));
+  groups.set("", []);
   filtered.forEach((entry) => {
-    const priority = normalizePriority(entry.priority);
-    const isRenaming = state.renamingEntryId === entry.id;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `vault-item${entry.id === state.activeId ? " active" : ""}`;
-    button.setAttribute("role", "listitem");
-    button.dataset.entry = entry.id;
-    const row = document.createElement("div");
-    row.className = "vault-item-row";
-
-    const dot = document.createElement("span");
-    dot.className = `priority-dot ${priority}`;
-
-    const itemMain = document.createElement("div");
-    itemMain.className = "item-main";
-
-    if (isRenaming) {
-      const renameInput = document.createElement("input");
-      renameInput.className = "rename-input";
-      renameInput.dataset.renameInput = entry.id;
-      renameInput.value = entry.site || "";
-      renameInput.setAttribute("aria-label", "修改名称");
-      itemMain.appendChild(renameInput);
-    } else {
-      const strong = document.createElement("strong");
-      strong.textContent = entry.site || "";
-      itemMain.appendChild(strong);
-    }
-
-    const tags = document.createElement("span");
-    tags.textContent = formatEntryTagLine(entry.tags);
-    itemMain.appendChild(tags);
-
-    row.append(dot, itemMain);
-
-    button.append(row);
-    button.addEventListener("click", () => {
-      if (state.renamingEntryId) return;
-      setActiveEntry(entry.id);
-    });
-    button.addEventListener("contextmenu", (event) => {
-      showEntryContextMenu(event, entry);
-    });
-    const renameInput = button.querySelector(".rename-input");
-    renameInput?.addEventListener("click", (event) => event.stopPropagation());
-    renameInput?.addEventListener("pointerdown", (event) => event.stopPropagation());
-    renameInput?.addEventListener("blur", () => {
-      commitInlineRename(renameInput);
-    });
-    renameInput?.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        renameInput.blur();
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        commitInlineRename(renameInput, { cancel: true });
-      }
-    });
-    vaultList.insertBefore(button, emptyState);
+    const folderId = getEntryFolderId(entry);
+    if (!groups.has(folderId)) groups.set(folderId, []);
+    groups.get(folderId).push(entry);
   });
+
+  const showEmptyFolders = shouldShowEmptyFolders(query);
+  const appendGroup = (folder, entries) => {
+    const shouldShowGroup = entries.length || showEmptyFolders || (folder?.id && state.renamingFolderId === folder.id);
+    if (!shouldShowGroup) return;
+    renderedGroupCount += 1;
+    const folderNode = createFolderNode(folder, entries);
+    if (!folderNode) return;
+    vaultList.insertBefore(folderNode, emptyState);
+    if (folder?.id && getFolderCollapsed(folder.id)) return;
+    entries.forEach((entry) => vaultList.insertBefore(createEntryNode(entry), emptyState));
+  };
+
+  sortFolders(getFolders()).forEach((folder) => appendGroup(folder, groups.get(folder.id) || []));
+  const unfiledEntries = groups.get("") || [];
+  unfiledEntries.forEach((entry) => {
+    renderedGroupCount += 1;
+    vaultList.insertBefore(createEntryNode(entry), emptyState);
+  });
+  emptyState.classList.toggle("hidden", renderedGroupCount > 0);
 }
 
 function fillForm(entry) {
@@ -2604,6 +3142,7 @@ function closeSettingsView() {
 
 async function saveSettings() {
   state.settings = normalizeSettings({
+    ...state.settings,
     autoLockMinutes: autoLockMinutes?.value,
     clipboardClearSeconds: clipboardClearSeconds?.value,
     cloudCheckMinutes: cloudCheckMinutes?.value,
@@ -2611,6 +3150,7 @@ async function saveSettings() {
     copyConfirm: copyConfirmSetting?.checked,
     welcomeOnStart: welcomeSetting?.checked,
     backupBeforeExport: backupExportSetting?.checked,
+    folders: state.settings?.folders,
   });
   syncSettingsForm();
   touchActivity();
@@ -2642,6 +3182,7 @@ async function upsertEntry() {
     tags: state.editTags.join(" / "),
     notes: notesInput.value.trim(),
     favorite: getActiveEntry()?.favorite || false,
+    folderId: getActiveEntry()?.folderId || "",
     pinned: getActiveEntry()?.pinned || pinnedToggle?.getAttribute("aria-pressed") === "true",
     priority: normalizePriority(state.activePriority),
     createdAt: getActiveEntry()?.createdAt || new Date().toISOString(),
@@ -3130,6 +3671,7 @@ topSyncStatus?.addEventListener("click", () => {
       copyConfirm: copyConfirmSetting?.checked,
       welcomeOnStart: welcomeSetting?.checked,
       backupBeforeExport: backupExportSetting?.checked,
+      folders: state.settings?.folders,
     });
     syncSettingsForm();
     await refreshVaultAfterMutation("设置已保存");
@@ -3172,6 +3714,11 @@ entryContextMenu?.addEventListener("click", async (event) => {
     renameContextEntry(entry);
     return;
   }
+  if (action === "move-folder") {
+    await moveEntryToFolder(entry, button.dataset.folderId || "");
+    touchActivity();
+    return;
+  }
   if (action === "toggle-pin") {
     entry.pinned = !entry.pinned;
     hideEntryContextMenu();
@@ -3185,16 +3732,79 @@ entryContextMenu?.addEventListener("click", async (event) => {
   }
 });
 
+folderContextMenu?.addEventListener("click", async (event) => {
+  const priorityButton = event.target.closest("[data-folder-priority]");
+  if (priorityButton) {
+    const folderId = state.contextFolderId;
+    const nextPriority = priorityButton.dataset.folderPriority;
+    hideFolderContextMenu();
+    if (!getFolder(folderId) || !nextPriority) return;
+    await setFolderPriority(folderId, nextPriority);
+    touchActivity();
+    return;
+  }
+  const button = event.target.closest("[data-folder-action]");
+  if (!button) return;
+  const folderId = state.contextFolderId;
+  if (!getFolder(folderId)) return hideFolderContextMenu();
+
+  const action = button.dataset.folderAction;
+  hideFolderContextMenu();
+  if (action === "rename") {
+    renameContextFolder(folderId);
+    touchActivity();
+    return;
+  }
+  if (action === "delete") {
+    await deleteContextFolder(folderId);
+    touchActivity();
+  }
+});
+
+sidebarContextMenu?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-sidebar-action]");
+  if (!button) return;
+  const action = button.dataset.sidebarAction;
+  hideSidebarContextMenu();
+  if (action !== "new-folder") return;
+  if (!state.unlocked) {
+    showToast("请先解锁保险箱");
+    return;
+  }
+  if (isSettingsOpen()) {
+    showToast("请先退出设置页");
+    return;
+  }
+  await createFolder();
+  touchActivity();
+});
+
+sidebar?.addEventListener("contextmenu", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  if (target.closest("[data-entry]") || target.closest("[data-folder]")) return;
+  if (target.closest("input, select, button, .settings-nav")) return;
+  showSidebarContextMenu(event);
+});
+
 window.addEventListener("mousemove", touchActivity, { passive: true });
 window.addEventListener("pointerdown", touchActivity, { passive: true });
 window.addEventListener("scroll", touchActivity, { passive: true });
 window.addEventListener("keydown", (event) => {
   touchActivity();
-  if (event.key === "Escape") hideEntryContextMenu();
+  if (event.key === "Escape") {
+    hideEntryContextMenu();
+    hideFolderContextMenu();
+    hideSidebarContextMenu();
+  }
 });
 window.addEventListener("click", (event) => {
   if (entryContextMenu?.contains(event.target)) return;
+  if (folderContextMenu?.contains(event.target)) return;
+  if (sidebarContextMenu?.contains(event.target)) return;
   hideEntryContextMenu();
+  hideFolderContextMenu();
+  hideSidebarContextMenu();
 });
 
 function showMainVault(payload) {

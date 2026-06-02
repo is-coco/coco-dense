@@ -1980,7 +1980,7 @@ function wireWindowControls() {
     }
   });
 
-  ipcMain.handle("vault:recoverWithAnswers", (_event, answers) => {
+  ipcMain.handle("vault:recoverWithAnswers", (_event, answers, dataKey = "") => {
     const recovery = loadRecoveryFile();
     if (!recovery.exists) {
       return { ok: false, unavailable: true, error: "还没有设置安全问题" };
@@ -2001,11 +2001,18 @@ function wireWindowControls() {
         return { ok: false, error: "当前保险箱不可用，无法解锁" };
       }
 
-      const decrypted = decryptVault(recoveredPassword, vaultState.data, { dataKey: activeDataKey });
+      const nextDataKey = String(dataKey ?? "").trim();
+      const decrypted = decryptVault(recoveredPassword, vaultState.data, {
+        dataKey: nextDataKey || activeDataKey,
+      });
       const payload = decrypted.payload;
       vaultCache = payload;
       activeMasterPassword = recoveredPassword;
-      loadRememberedDataKeyIntoSession();
+      if (nextDataKey) {
+        activeDataKey = nextDataKey;
+      } else {
+        loadRememberedDataKeyIntoSession();
+      }
       if (biometricStatus().configured) {
         saveBiometricSecret(recoveredPassword);
       }
@@ -2018,10 +2025,18 @@ function wireWindowControls() {
       };
     } catch (error) {
       if (error?.code === "DATA_KEY_REQUIRED") {
-        return { ok: false, error: "主密码已恢复，但还需要数据钥匙才能打开保险箱" };
+        return {
+          ok: false,
+          needsDataKey: true,
+          error: "安全问题已验证，请继续输入数据钥匙",
+        };
       }
       if (error?.code === "DATA_KEY_INVALID") {
-        return { ok: false, error: "安全问题正确，但数据钥匙不正确" };
+        return {
+          ok: false,
+          needsDataKey: true,
+          error: "数据钥匙不正确",
+        };
       }
       consumeUnlockFailure();
       return { ok: false, error: "安全问题答案不正确" };

@@ -52,7 +52,7 @@ contextBridge.exposeInMainWorld("vault", {
   disableBiometric: () => ipcRenderer.invoke("vault:disableBiometric"),
   setupRecovery: (masterPassword, questions, answers) =>
     ipcRenderer.invoke("vault:setupRecovery", masterPassword, questions, answers),
-  recoverWithAnswers: (answers) => ipcRenderer.invoke("vault:recoverWithAnswers", answers),
+  recoverWithAnswers: (answers, dataKey) => ipcRenderer.invoke("vault:recoverWithAnswers", answers, dataKey),
   exportVaultFile: (masterPassword, payload) => ipcRenderer.invoke("vault:exportFile", masterPassword, payload),
   importVaultFile: (masterPassword, dataKey) => ipcRenderer.invoke("vault:importFile", masterPassword, dataKey),
   onShowVault: (callback) => {

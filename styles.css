@@ -97,6 +97,8 @@ body.auth-mode .app-shell {
   padding: 48px 24px 24px;
   border-radius: 0;
   box-shadow: none;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 body:not(.auth-mode) .auth-screen {
@@ -472,6 +474,13 @@ textarea::placeholder {
   app-region: no-drag;
 }
 
+.auth-top,
+.auth-form,
+.auth-traffic-lights {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .auth-screen input,
 .auth-screen button {
   -webkit-app-region: no-drag;
@@ -837,6 +846,8 @@ textarea::placeholder {
   color: var(--muted);
   background: rgba(255, 255, 255, 0.66);
   font-size: 11px;
+  gap: 6px;
+  padding: 0 9px;
 }
 
 .search-icon {
@@ -852,6 +863,10 @@ textarea::placeholder {
 
 .search-row input {
   font-size: 11px;
+}
+
+.search-row input::placeholder {
+  font-size: 10px;
 }
 
 .sidebar-filter-row {
@@ -931,6 +946,103 @@ textarea::placeholder {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
+.folder-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 28px;
+  color: #5f6673;
+}
+
+.folder-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 9px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+.folder-menu-btn:hover,
+.folder-menu-btn:focus-visible {
+  color: var(--text);
+  background: rgba(0, 122, 255, 0.07);
+}
+
+.folder-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 8px;
+  border-radius: 9px;
+  background: rgba(60, 60, 67, 0.045);
+}
+
+.folder-main:hover {
+  color: var(--text);
+  background: rgba(60, 60, 67, 0.065);
+}
+
+.folder-chevron {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: #7b8190;
+  font-size: 13px;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 140ms ease;
+}
+
+.folder-item.collapsed .folder-chevron {
+  transform: rotate(0deg);
+}
+
+.folder-name-wrap {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.folder-name-wrap strong {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-count {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.folder-menu-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 9px;
+  color: #7b8190;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1;
+}
+
 .vault-item-row {
   display: flex;
   align-items: center;
@@ -982,6 +1094,38 @@ textarea::placeholder {
   background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(232, 243, 255, 0.96));
 }
 
+.vault-item-nested {
+  min-height: 40px;
+  width: calc(100% - 24px);
+  max-width: calc(100% - 24px);
+  margin-left: 24px;
+  padding: 7px 9px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.vault-item-nested .vault-item-row {
+  gap: 7px;
+}
+
+.vault-item-nested .priority-dot {
+  width: 8px;
+  height: 8px;
+}
+
+.vault-item-nested .item-main {
+  gap: 1px;
+}
+
+.vault-item-nested .item-main strong {
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.vault-item-nested .item-main span {
+  font-size: 9px;
+}
+
 .item-main {
   display: grid;
   gap: 2px;
@@ -1019,6 +1163,20 @@ textarea::placeholder {
 .rename-input:focus {
   border-color: rgba(0, 122, 255, 0.32);
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.08);
+}
+
+.folder-rename-input {
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  border-radius: 7px;
+  color: #111827;
+  background: rgba(255, 255, 255, 0.96);
+  font-size: 11px;
+  font-weight: 760;
+  outline: none;
 }
 
 .item-main span {
@@ -1102,6 +1260,14 @@ textarea::placeholder {
   display: grid;
   gap: 12px;
   min-height: 0;
+}
+
+.settings-page .primary-btn,
+.settings-page .secondary-btn,
+.settings-page .danger-outline-btn {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 11px;
 }
 
 .settings-grid {
@@ -1240,6 +1406,17 @@ textarea::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.action-setting > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.action-setting .secondary-btn {
+  flex: 0 0 92px;
+  min-width: 92px;
+  white-space: nowrap;
 }
 
 .action-setting p {
@@ -1438,6 +1615,8 @@ textarea::placeholder {
 
 .recovery-actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   justify-content: flex-end;
 }
@@ -1449,6 +1628,7 @@ textarea::placeholder {
 .data-key-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 7px;
 }
 
@@ -1485,43 +1665,170 @@ textarea::placeholder {
 .webdav-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
 }
 
 .recovery-modal-sheet {
-  width: min(460px, calc(100vw - 28px));
+  width: min(272px, calc(100vw - 8px));
+  max-height: min(344px, calc(100dvh - 10px));
+  padding: 11px;
+  overflow: auto;
 }
 
 .recovery-form {
-  gap: 12px;
+  gap: 6px;
 }
 
 .recovery-form label {
-  gap: 6px;
+  gap: 4px;
+}
+
+.recovery-form label span {
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .recovery-empty {
   display: grid;
-  gap: 6px;
-  padding: 16px;
+  gap: 5px;
+  padding: 10px;
   border: 1px solid rgba(60, 60, 67, 0.09);
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgba(244, 247, 250, 0.72);
 }
 
 .recovery-empty strong {
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .recovery-empty span {
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .recovery-form select,
 .recovery-form input {
-  min-height: 38px;
+  min-height: 30px;
+  font-size: 11px;
+}
+
+.recovery-modal-sheet .modal-head {
+  gap: 4px;
+}
+
+.recovery-modal-sheet .modal-head h2 {
+  font-size: 15px;
+}
+
+.recovery-modal-sheet .modal-helper {
+  margin: 4px 0 8px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.recovery-modal-sheet .modal-helper.is-alert {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.recovery-modal-sheet .form-error {
+  margin-top: 0;
+  font-size: 11px;
+}
+
+.recovery-modal-sheet .modal-actions {
+  position: sticky;
+  bottom: 0;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 5px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.recovery-modal-sheet .modal-actions .secondary-btn,
+.recovery-modal-sheet .modal-actions .primary-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.recovery-modal-sheet .modal-actions .primary-btn {
+  background: var(--accent);
+}
+
+.recovery-form[data-recovery-step="data-key"] .modal-actions .primary-btn {
+  background: #ff3b30;
+}
+
+.recovery-form[data-recovery-step="data-key"] .modal-actions .primary-btn:hover {
+  background: #e12f26;
+}
+
+#forgotPasswordModal {
+  padding: 8px;
+  background: rgba(243, 246, 250, 0.56);
+}
+
+#forgotPasswordModal .recovery-modal-sheet {
+  width: min(248px, calc(100vw - 20px));
+  max-height: min(320px, calc(100dvh - 20px));
+  padding: 10px;
+  border-radius: 18px;
+}
+
+#forgotPasswordModal .modal-head {
+  gap: 2px;
+}
+
+#forgotPasswordModal .modal-head h2 {
+  font-size: 14px;
+}
+
+#forgotPasswordModal .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+#forgotPasswordModal .modal-helper {
+  margin: 3px 0 7px;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+#forgotPasswordModal .recovery-form {
+  gap: 5px;
+}
+
+#forgotPasswordModal .recovery-form label span {
+  font-size: 10px;
+}
+
+#forgotPasswordModal .recovery-form input {
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+
+#forgotPasswordModal .form-error {
+  font-size: 10px;
+}
+
+#forgotPasswordModal .modal-actions {
+  gap: 5px;
+  padding-top: 4px;
+}
+
+#forgotPasswordModal .modal-actions .secondary-btn,
+#forgotPasswordModal .modal-actions .primary-btn {
+  min-height: 28px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 10px;
 }
 
 .form-grid {
@@ -2007,6 +2314,29 @@ textarea::placeholder {
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
+}
+
+.menu-folder-list {
+  display: grid;
+  gap: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.entry-context-menu .menu-folder-list button {
+  min-height: 28px;
+  padding-inline: 12px;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.entry-context-menu button:disabled {
+  color: #9ca3af;
+  cursor: default;
+}
+
+.entry-context-menu button:disabled:hover {
+  background: transparent;
 }
 
 .menu-dot,

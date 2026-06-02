@@ -175,7 +175,7 @@
                   <input
                     id="searchInput"
                     type="search"
-                    placeholder="搜索名称、账号、网址、标签"
+                    placeholder="搜索名称、账号、网址"
                     aria-label="搜索密码记录"
                   />
                 </div>
@@ -688,21 +688,25 @@
           <button class="icon-btn" type="button" id="closeForgotPasswordBtn" aria-label="关闭忘记密码窗口">×</button>
         </div>
         <p class="modal-helper" id="forgotPasswordHelper">
-          如果你之前设置过安全问题，可以通过答案解锁本地恢复包。
+          先验证你设置过的安全问题答案。
         </p>
         <div class="recovery-empty hidden" id="forgotPasswordUnavailable">
           <strong>还没有设置安全问题</strong>
           <span>Coco Dense 不会保存可直接找回的明文主密码。请记住主密码，或在解锁后到设置里配置安全问题。</span>
         </div>
         <form class="modal-form recovery-form" id="forgotPasswordForm">
-          <label>
+          <label id="forgotAnswerField">
             <span id="forgotQuestion1">安全问题</span>
-            <input id="forgotAnswer1" type="password" autocomplete="off" placeholder="请输入答案" />
+            <input id="forgotAnswer1" type="text" autocomplete="off" placeholder="请输入答案" />
+          </label>
+          <label class="hidden" id="forgotDataKeyField">
+            <span>数据钥匙</span>
+            <input id="forgotDataKeyInput" type="text" autocomplete="off" placeholder="请输入数据钥匙" />
           </label>
           <p class="form-error hidden" id="forgotPasswordError" role="alert"></p>
           <div class="modal-actions">
             <button class="secondary-btn" type="button" id="cancelForgotPasswordBtn">取消</button>
-            <button class="primary-btn" type="submit" id="submitForgotPasswordBtn">验证并解锁</button>
+            <button class="primary-btn" type="submit" id="submitForgotPasswordBtn">解锁</button>
           </div>
         </form>
       </section>
@@ -733,7 +737,7 @@
           </label>
           <label>
             答案
-            <input id="recoveryAnswer1" type="password" autocomplete="off" placeholder="请输入答案" />
+            <input id="recoveryAnswer1" type="text" autocomplete="off" placeholder="请输入答案" />
           </label>
           <p class="form-error hidden" id="recoverySettingsError" role="alert"></p>
           <div class="modal-actions">
@@ -754,6 +758,9 @@
       <button type="button" role="menuitem" data-menu-action="rename">
         <span class="menu-label">改名称</span>
       </button>
+      <div class="menu-separator" aria-hidden="true"></div>
+      <div class="menu-title">文件夹</div>
+      <div class="menu-folder-list" id="entryFolderMoveList"></div>
       <div class="menu-separator" aria-hidden="true"></div>
       <button type="button" role="menuitem" data-menu-action="toggle-pin">
         <span class="menu-dot pin"></span>
@@ -779,6 +786,37 @@
           <span class="menu-priority green"></span>
         </button>
       </div>
+    </div>
+
+    <div class="entry-context-menu hidden" id="folderContextMenu" role="menu" aria-hidden="true">
+      <button type="button" role="menuitem" data-folder-action="rename">
+        <span class="menu-label">改文件夹名</span>
+      </button>
+      <button type="button" role="menuitem" data-folder-action="delete">
+        <span class="menu-label">删除文件夹</span>
+      </button>
+      <div class="menu-separator" aria-hidden="true"></div>
+      <div class="menu-title">优先级</div>
+      <div class="menu-priority-row" role="group" aria-label="分组优先级">
+        <button type="button" data-folder-priority="red" aria-label="红色优先级">
+          <span class="menu-priority red"></span>
+        </button>
+        <button type="button" data-folder-priority="yellow" aria-label="黄色优先级">
+          <span class="menu-priority yellow"></span>
+        </button>
+        <button type="button" data-folder-priority="blue" aria-label="蓝色优先级">
+          <span class="menu-priority blue"></span>
+        </button>
+        <button type="button" data-folder-priority="green" aria-label="绿色优先级">
+          <span class="menu-priority green"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="entry-context-menu hidden" id="sidebarContextMenu" role="menu" aria-hidden="true">
+      <button type="button" role="menuitem" data-sidebar-action="new-folder">
+        <span class="menu-label">新建分组</span>
+      </button>
     </div>
 
     <script src="./script.js"></script>
