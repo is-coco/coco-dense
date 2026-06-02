@@ -151,13 +151,13 @@
               </div>
             </div>
             <div class="topbar-actions">
-              <div class="sync-pill sync-pill-warn" id="topSyncStatus" data-sync-state="warn">
+              <button class="sync-pill sync-pill-warn" id="topSyncStatus" data-sync-state="warn" type="button" title="点击双向合并同步数据">
                 <span class="sync-pill-main">
                   <span class="sync-pill-dot"></span>
                   <span id="topSyncText">未解锁</span>
                 </span>
                 <span class="sync-pill-time" id="lastUpdateText">上次更新时间：--</span>
-              </div>
+              </button>
               <button class="secondary-btn" type="button" id="lockBtn">锁定</button>
               <button class="secondary-btn" type="button" id="settingsBtn">设置</button>
               <button class="primary-btn" type="button" id="newEntryBtn">新增</button>
@@ -179,8 +179,20 @@
                     aria-label="搜索密码记录"
                   />
                 </div>
+                <div class="sidebar-filter-row">
+                  <select id="tagFilterSelect" aria-label="按标签筛选">
+                    <option value="">全部标签</option>
+                  </select>
+                  <select id="priorityFilterSelect" aria-label="按优先级筛选">
+                    <option value="">全部优先级</option>
+                    <option value="red">红色</option>
+                    <option value="yellow">黄色</option>
+                    <option value="blue">蓝色</option>
+                    <option value="green">绿色</option>
+                  </select>
+                </div>
 
-                <div class="chip-row">
+                <div class="chip-row hidden" aria-hidden="true">
                   <button class="chip chip-active" type="button">全部</button>
                   <button class="chip" type="button">收藏</button>
                   <button class="chip" type="button">最近</button>
@@ -353,7 +365,9 @@
                     <div class="field-block">
                       <label for="tagsInput">标签</label>
                       <div class="tag-field">
-                        <input id="tagsInput" type="text" placeholder="输入标签后按回车" />
+                        <input id="tagsInput" type="text" list="existingTagOptions" placeholder="输入标签后按回车" />
+                        <datalist id="existingTagOptions"></datalist>
+                        <div class="tag-suggestion-list" id="tagSuggestions"></div>
                         <div class="tag-preview" id="tagPreview"></div>
                       </div>
                     </div>

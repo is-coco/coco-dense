@@ -18,6 +18,10 @@ const toggleEntryPassword = document.getElementById("toggleEntryPassword");
 const urlInput = document.getElementById("urlInput");
 const tagsInput = document.getElementById("tagsInput");
 const tagPreview = document.getElementById("tagPreview");
+const tagSuggestions = document.getElementById("tagSuggestions");
+const existingTagOptions = document.getElementById("existingTagOptions");
+const tagFilterSelect = document.getElementById("tagFilterSelect");
+const priorityFilterSelect = document.getElementById("priorityFilterSelect");
 const notesInput = document.getElementById("notesInput");
 const editEntryBtn = document.getElementById("editEntryBtn");
 const favoriteEntryBtn = document.getElementById("favoriteEntryBtn");
@@ -123,6 +127,17 @@ const maximizeWindowBtn = document.getElementById("maximizeWindowBtn");
 
 document.body.classList.toggle("native-window-controls", window.vault?.platform === "darwin");
 
+if (favoriteEntryBtn) {
+  favoriteEntryBtn.remove();
+}
+
+const favoriteContextButton = entryContextMenu?.querySelector('[data-menu-action="toggle-favorite"]');
+const favoriteContextSeparator = favoriteContextButton?.nextElementSibling?.classList.contains("menu-separator")
+  ? favoriteContextButton.nextElementSibling
+  : null;
+favoriteContextButton?.remove();
+favoriteContextSeparator?.remove();
+
 const PRIORITY_ORDER = {
   red: 4,
   yellow: 3,
@@ -130,12 +145,6 @@ const PRIORITY_ORDER = {
   green: 1,
 };
 
-const PRIORITY_LABELS = {
-  red: "高优先级",
-  yellow: "中优先级",
-  blue: "普通",
-  green: "低优先级",
-};
 const SECRET_MASK = "●●●●●●●●";
 
 const SETTINGS_SECTIONS = {
@@ -167,7 +176,7 @@ const state = {
   unlocked: false,
   editing: false,
   detailMode: "welcome",
-  settingsSection: "security",
+  settingsSection: "general",
   editTags: [],
   pendingActions: {},
   readPasswordVisible: false,
@@ -200,7 +209,10 @@ const state = {
   vaultCorrupted: false,
   lockedUntil: 0,
   activeFilter: "全部",
+  activeTagFilter: "",
+  activePriorityFilter: "",
   activePriority: "green",
+  tagInputFocused: false,
   contextEntryId: "",
   renamingEntryId: "",
   recoveryStatus: {
@@ -261,6 +273,88 @@ function buildSearchIndex(entry) {
   const baseText = parts.join(" ").toLowerCase();
   const initials = window.vault?.toPinyinInitials?.(parts.join(" ")) || "";
   return `${baseText} ${initials}`.trim();
+}
+
+function getAllTags(entries = getVisibleEntries()) {
+  const tags = new Set();
+  entries.forEach((entry) => {
+    parseTags(entry.tags).forEach((tag) => tags.add(tag));
+  });
+  return [...tags].sort((a, b) => a.localeCompare(b, "zh-CN"));
+}
+
+function formatEntryTagLine(value) {
+  const tags = parseTags(value);
+  return tags.length ? tags.join(" · ") : "无标签";
+}
+
+function getSuggestedTags(keyword = "") {
+  const query = keyword.trim().toLowerCase();
+  const queryInitials = window.vault?.toPinyinInitials?.(keyword.trim()) || "";
+  return getAllTags().filter((tag) => {
+    if (state.editTags.includes(tag)) return false;
+    if (!query) return true;
+    const lowerTag = tag.toLowerCase();
+    const initials = window.vault?.toPinyinInitials?.(tag) || "";
+    return lowerTag.includes(query) || (queryInitials && initials.includes(queryInitials));
+  });
+}
+
+function syncSidebarFilters() {
+  const tags = getAllTags();
+
+  if (tagFilterSelect) {
+    if (state.activeTagFilter && !tags.includes(state.activeTagFilter)) {
+      state.activeTagFilter = "";
+    }
+    tagFilterSelect.innerHTML = "";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "全部标签";
+    tagFilterSelect.appendChild(defaultOption);
+    tags.forEach((tag) => {
+      const option = document.createElement("option");
+      option.value = tag;
+      option.textContent = tag;
+      tagFilterSelect.appendChild(option);
+    });
+    tagFilterSelect.value = state.activeTagFilter;
+  }
+
+  if (priorityFilterSelect) {
+    priorityFilterSelect.value = state.activePriorityFilter;
+  }
+
+  if (existingTagOptions) {
+    existingTagOptions.innerHTML = "";
+    tags.forEach((tag) => {
+      const option = document.createElement("option");
+      option.value = tag;
+      existingTagOptions.appendChild(option);
+    });
+  }
+}
+
+function renderTagSuggestions() {
+  if (!tagSuggestions) return;
+  const shouldShow = state.tagInputFocused || Boolean(tagsInput?.value.trim());
+  if (!shouldShow) {
+    tagSuggestions.innerHTML = "";
+    tagSuggestions.classList.add("hidden");
+    return;
+  }
+
+  const suggestions = getSuggestedTags(tagsInput?.value || "").slice(0, 8);
+  tagSuggestions.innerHTML = "";
+  tagSuggestions.classList.toggle("hidden", suggestions.length === 0);
+  suggestions.forEach((tag) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tag-suggestion";
+    button.dataset.tagSuggestion = tag;
+    button.textContent = tag;
+    tagSuggestions.appendChild(button);
+  });
 }
 
 function normalizeSettings(settings = {}) {
@@ -432,16 +526,44 @@ async function handlePrimaryAction() {
   touchActivity();
 }
 
+function clearPendingAction(actionKey) {
+  const pending = state.pendingActions[actionKey];
+  if (!pending) return;
+  clearTimeout(pending.timeoutId);
+  clearInterval(pending.intervalId);
+  delete state.pendingActions[actionKey];
+}
+
 function confirmWithin(actionKey, firstMessage, onConfirm, windowMs = 3000) {
   const now = Date.now();
-  if (!state.pendingActions[actionKey] || now - state.pendingActions[actionKey] > windowMs) {
-    state.pendingActions[actionKey] = now;
-    showToast(firstMessage);
+  const pending = state.pendingActions[actionKey];
+  if (pending && pending.expiresAt > now) {
+    clearPendingAction(actionKey);
+    onConfirm();
     return;
   }
 
-  delete state.pendingActions[actionKey];
-  onConfirm();
+  clearPendingAction(actionKey);
+  const expiresAt = now + windowMs;
+  const renderCountdownToast = () => {
+    const remaining = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
+    showToast(`${firstMessage}（${remaining}）`);
+  };
+
+  renderCountdownToast();
+  const intervalId = setInterval(() => {
+    if (Date.now() >= expiresAt) {
+      clearPendingAction(actionKey);
+      return;
+    }
+    renderCountdownToast();
+  }, 1000);
+  const timeoutId = setTimeout(() => clearPendingAction(actionKey), windowMs);
+  state.pendingActions[actionKey] = {
+    expiresAt,
+    intervalId,
+    timeoutId,
+  };
 }
 
 function makeId(site) {
@@ -715,7 +837,6 @@ function syncDetailSurface() {
   importVaultBtn?.classList.toggle("hidden", showEdit);
   generatePasswordBtn?.classList.toggle("hidden", !showEdit);
   openUrlBtn?.classList.toggle("hidden", !showRead);
-  favoriteEntryBtn?.classList.toggle("hidden", !hasSelection || showSettings || showWelcome);
   deleteEntryBtn?.classList.toggle("hidden", !hasSelection || showSettings || showWelcome);
 
   if (detailModeLabel) {
@@ -769,6 +890,12 @@ function syncSettingsNavigation() {
     const active = button.dataset.settingsSection === section;
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
+  });
+
+  const navOrder = ["general", "data-key", "security", "backup", "sync"];
+  settingsNav?.querySelectorAll("[data-settings-section]").forEach((button) => {
+    const order = navOrder.indexOf(button.dataset.settingsSection);
+    button.style.order = String(order >= 0 ? order : 99);
   });
 
   settingsView?.querySelectorAll("[data-settings-page]").forEach((page) => {
@@ -1472,9 +1599,7 @@ function showEntryContextMenu(event, entry) {
   setActiveEntry(entry.id);
 
   const pinLabel = entryContextMenu.querySelector('[data-menu-action="toggle-pin"] .menu-label');
-  const favoriteLabel = entryContextMenu.querySelector('[data-menu-action="toggle-favorite"] .menu-label');
   if (pinLabel) pinLabel.textContent = entry.pinned ? "取消置顶" : "置顶";
-  if (favoriteLabel) favoriteLabel.textContent = entry.favorite ? "取消收藏" : "收藏";
   entryContextMenu.querySelectorAll("[data-priority]").forEach((button) => {
     button.classList.toggle("active", button.dataset.priority === normalizePriority(entry.priority));
   });
@@ -1981,8 +2106,11 @@ async function initAuthState() {
 }
 
 function renderEntries() {
+  syncSidebarFilters();
   const query = searchInput.value.trim().toLowerCase();
   const filtered = sortEntries(getVisibleEntries().filter((entry) => {
+    if (state.activeTagFilter && !parseTags(entry.tags).includes(state.activeTagFilter)) return false;
+    if (state.activePriorityFilter && normalizePriority(entry.priority) !== state.activePriorityFilter) return false;
     if (state.activeFilter === "收藏" && !entry.favorite) return false;
     if (state.activeFilter === "最近" && !entry.lastUsedAt) return false;
     if (!query) return true;
@@ -2003,8 +2131,6 @@ function renderEntries() {
     button.className = `vault-item${entry.id === state.activeId ? " active" : ""}`;
     button.setAttribute("role", "listitem");
     button.dataset.entry = entry.id;
-    const badgeClass = entry.pinned ? " pin" : entry.favorite ? " warn" : ` priority-${priority}`;
-    const badgeText = entry.pinned ? "置顶" : entry.favorite ? "收藏" : PRIORITY_LABELS[priority];
     const row = document.createElement("div");
     row.className = "vault-item-row";
 
@@ -2027,17 +2153,13 @@ function renderEntries() {
       itemMain.appendChild(strong);
     }
 
-    const account = document.createElement("span");
-    account.textContent = entry.account || "";
-    itemMain.appendChild(account);
+    const tags = document.createElement("span");
+    tags.textContent = formatEntryTagLine(entry.tags);
+    itemMain.appendChild(tags);
 
     row.append(dot, itemMain);
 
-    const badge = document.createElement("span");
-    badge.className = `badge${badgeClass}`;
-    badge.textContent = badgeText;
-
-    button.append(row, badge);
+    button.append(row);
     button.addEventListener("click", () => {
       if (state.renamingEntryId) return;
       setActiveEntry(entry.id);
@@ -2087,6 +2209,7 @@ function clearForm() {
   state.activeId = "";
   state.readPasswordVisible = false;
   state.activePriority = "green";
+  state.tagInputFocused = false;
   siteInput.value = "";
   accountInput.value = "";
   entryPasswordInput.value = "";
@@ -2101,6 +2224,7 @@ function clearForm() {
   document.querySelectorAll(".vault-item").forEach((node) => node.classList.remove("active"));
   syncPriorityPicker();
   syncPinnedToggle();
+  renderTagSuggestions();
   setDetailMode("welcome");
 }
 
@@ -2139,6 +2263,7 @@ function renderTagPreview() {
     token.append(label, removeButton);
     tagPreview.appendChild(token);
   });
+  renderTagSuggestions();
 }
 
 function addEditTag(tag) {
@@ -2196,7 +2321,6 @@ function renderReadView(entry) {
     });
     readTags.appendChild(token);
   });
-  favoriteEntryBtn.textContent = entry.favorite ? "取消收藏" : "收藏";
   syncEmptyDetailState();
 }
 
@@ -2442,19 +2566,6 @@ cancelEditBtn.addEventListener("click", () => {
   touchActivity();
 });
 
-favoriteEntryBtn.addEventListener("click", async () => {
-  const entry = getActiveEntry();
-  if (!entry) return showToast("当前没有可查看的记录");
-  entry.favorite = !entry.favorite;
-  entry.updatedAt = new Date().toISOString();
-  renderEntries();
-  renderReadView(entry);
-  if (await persistVault()) {
-    showToast(entry.favorite ? "已收藏" : "已取消收藏");
-  }
-  touchActivity();
-});
-
 generatePasswordBtn.addEventListener("click", () => {
   entryPasswordInput.value = generateStrongPassword(state.settings.passwordLength);
   syncPasswordStrength();
@@ -2640,9 +2751,11 @@ searchInput.addEventListener("input", () => {
 });
 tagsInput.addEventListener("input", () => {
   const value = tagsInput.value;
-  if (!/[、/|;；,\s]/.test(value)) return;
-  parseTags(value).forEach(addEditTag);
-  tagsInput.value = "";
+  if (/[、/|;；,\s]/.test(value)) {
+    parseTags(value).forEach(addEditTag);
+    tagsInput.value = "";
+  }
+  renderTagSuggestions();
   touchActivity();
 });
 tagsInput.addEventListener("keydown", (event) => {
@@ -2650,14 +2763,35 @@ tagsInput.addEventListener("keydown", (event) => {
   event.preventDefault();
   parseTags(tagsInput.value).forEach(addEditTag);
   tagsInput.value = "";
+  renderTagSuggestions();
   touchActivity();
 });
 
+tagsInput.addEventListener("focus", () => {
+  state.tagInputFocused = true;
+  renderTagSuggestions();
+});
+
 tagsInput.addEventListener("blur", () => {
-  const value = tagsInput.value.trim();
-  if (!value) return;
-  parseTags(value).forEach(addEditTag);
+  setTimeout(() => {
+    state.tagInputFocused = false;
+    const value = tagsInput.value.trim();
+    if (value) {
+      parseTags(value).forEach(addEditTag);
+      tagsInput.value = "";
+    }
+    renderTagSuggestions();
+  }, 120);
+});
+
+tagSuggestions?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-tag-suggestion]");
+  if (!button) return;
+  addEditTag(button.dataset.tagSuggestion || "");
   tagsInput.value = "";
+  renderTagSuggestions();
+  tagsInput.focus();
+  touchActivity();
 });
 
 priorityPicker?.addEventListener("click", (event) => {
@@ -2744,6 +2878,22 @@ document.querySelectorAll(".chip").forEach((chip) => {
   });
 });
 
+tagFilterSelect?.addEventListener("change", () => {
+  state.activeTagFilter = tagFilterSelect.value;
+  renderEntries();
+  touchActivity();
+});
+
+priorityFilterSelect?.addEventListener("change", () => {
+  state.activePriorityFilter = priorityFilterSelect.value;
+  renderEntries();
+  touchActivity();
+});
+
+topSyncStatus?.addEventListener("click", () => {
+  mergeWebdavNow();
+});
+
 [autoLockMinutes, clipboardClearSeconds, cloudCheckMinutes, passwordLengthSetting, copyConfirmSetting, welcomeSetting, backupExportSetting].forEach((node) => {
   node?.addEventListener("change", async () => {
     state.settings = normalizeSettings({
@@ -2800,12 +2950,6 @@ entryContextMenu?.addEventListener("click", async (event) => {
     entry.pinned = !entry.pinned;
     hideEntryContextMenu();
     await persistContextEntry(entry.pinned ? "已置顶" : "已取消置顶");
-    return;
-  }
-  if (action === "toggle-favorite") {
-    entry.favorite = !entry.favorite;
-    hideEntryContextMenu();
-    await persistContextEntry(entry.favorite ? "已收藏" : "已取消收藏");
     return;
   }
   if (button.dataset.priority) {

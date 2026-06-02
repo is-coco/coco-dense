@@ -381,6 +381,12 @@ textarea::placeholder {
   user-select: none;
   -webkit-app-region: no-drag;
   app-region: no-drag;
+  text-align: left;
+}
+
+.sync-pill:hover {
+  border-color: rgba(0, 122, 255, 0.18);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .sync-pill-main {
@@ -813,6 +819,7 @@ textarea::placeholder {
 }
 
 .read-notes {
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -821,6 +828,9 @@ textarea::placeholder {
   line-height: 1.45;
   font-size: 12px;
   white-space: pre-wrap;
+  text-align: left;
+  user-select: text;
+  cursor: text;
 }
 
 .search-row {
@@ -842,6 +852,25 @@ textarea::placeholder {
 
 .search-row input {
   font-size: 11px;
+}
+
+.sidebar-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.sidebar-filter-row select {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(60, 60, 67, 0.12);
+  border-radius: 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .empty-state {
@@ -1675,6 +1704,29 @@ textarea::placeholder {
   flex-wrap: wrap;
   gap: 6px;
   min-height: 20px;
+}
+
+.tag-suggestion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 0;
+}
+
+.tag-suggestion {
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px dashed rgba(0, 122, 255, 0.18);
+  border-radius: 999px;
+  color: #155bb5;
+  background: rgba(0, 122, 255, 0.04);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tag-suggestion:hover {
+  border-color: rgba(0, 122, 255, 0.28);
+  background: rgba(0, 122, 255, 0.1);
 }
 
 .tag-token {

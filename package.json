@@ -1,6 +1,6 @@
 {
   "name": "coco-dense",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -38,6 +38,7 @@
     },
     "win": {
       "icon": "assets/app-icon.ico",
+      "signAndEditExecutable": false,
       "target": [
         "portable"
       ]
