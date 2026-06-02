@@ -1466,6 +1466,46 @@ textarea::placeholder {
   line-height: 1.45;
 }
 
+.update-notes {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px solid rgba(60, 60, 67, 0.09);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.update-notes.hidden {
+  display: none;
+}
+
+.update-notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.update-notes-head span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.update-notes-head small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.update-notes-body {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .update-progress {
   display: grid;
   gap: 7px;

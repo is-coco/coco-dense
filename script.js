@@ -120,6 +120,9 @@ const updateStatusPill = document.getElementById("updateStatusPill");
 const currentVersionText = document.getElementById("currentVersionText");
 const latestVersionText = document.getElementById("latestVersionText");
 const updateAssetText = document.getElementById("updateAssetText");
+const updateNotesPanel = document.getElementById("updateNotesPanel");
+const updateNotesVersion = document.getElementById("updateNotesVersion");
+const updateNotesBody = document.getElementById("updateNotesBody");
 const updateProgressPanel = document.getElementById("updateProgressPanel");
 const updateProgressPercent = document.getElementById("updateProgressPercent");
 const updateProgressMeta = document.getElementById("updateProgressMeta");
@@ -1169,6 +1172,7 @@ function syncUpdateSettings() {
   const currentVersion = state.appInfo?.version || "";
   const latestVersion = state.updateInfo?.latestVersion || "";
   const updateAvailable = Boolean(state.updateInfo?.updateAvailable);
+  const notes = String(state.updateInfo?.notes || "").trim();
   if (currentVersionText) currentVersionText.textContent = currentVersion ? `v${currentVersion}` : "--";
   if (latestVersionText) latestVersionText.textContent = latestVersion ? `v${latestVersion}` : "--";
   if (downloadUpdateBtn) downloadUpdateBtn.disabled = state.updateDownloading || !updateAvailable || !state.updateInfo?.assetUrl;
@@ -1205,6 +1209,12 @@ function syncUpdateSettings() {
     updateAssetText.textContent = state.updateInfo?.assetName
       ? `将下载：${state.updateInfo.assetName}${state.updateInfo.assetSize ? `（${formatDownloadBytes(state.updateInfo.assetSize)}）` : ""}`
       : "发现新版后，会自动选择当前系统对应的安装包。";
+  }
+  if (updateNotesPanel && updateNotesBody && updateNotesVersion) {
+    const showNotes = updateAvailable && Boolean(notes);
+    updateNotesPanel.classList.toggle("hidden", !showNotes);
+    updateNotesVersion.textContent = latestVersion ? `v${latestVersion}` : "--";
+    updateNotesBody.textContent = showNotes ? notes : "--";
   }
   syncUpdateDownloadProgress();
 }
