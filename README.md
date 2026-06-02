@@ -69,9 +69,28 @@ powershell -ExecutionPolicy Bypass -File .\build-unpacked.ps1
 C:\Users\coco\Desktop\codex项目\dist\Coco Dense-win32-x64\Coco Dense.exe
 ```
 
+## 发布多端安装包
+
+这个仓库已经配置 GitHub Actions 自动发布流程：
+
+- 手动运行 `Release Builds` 工作流：只构建 macOS 和 Windows 安装包，适合测试。
+- 推送版本标签，例如 `v0.2.0`：自动构建 macOS `.dmg/.zip` 和 Windows `.exe`，并上传到同一个 GitHub Release。
+
+发布新版本：
+
+```bash
+npm version 0.2.0 --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "Release v0.2.0"
+git tag v0.2.0
+git push origin master --tags
+```
+
+发布完成后，在 GitHub 仓库的 `Releases` 页面可以同时下载不同平台的程序。
+
 ## 后续重点
 
-- 接入真正自动同步目录或 WebDAV 同步。
-- 增加主密码强度提示和错误次数限制。
-- 增加定期备份提醒和冲突处理。
-- 评估 Android 壳方案。
+- 处理正式上线前的 macOS 签名和公证。
+- 升级 Electron 与打包工具，清理依赖安全审计风险。
+- 继续完善 Windows 端体验和安装包形式。
+- 规划 Android 端的数据协议和同步实现。
