@@ -5,6 +5,20 @@ const crypto = require("node:crypto");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 
+const {
+  IV_LENGTH, KEY_LENGTH, SALT_LENGTH, PBKDF2_ROUNDS,
+  VAULT_FORMAT_V2, VAULT_FORMAT_V3,
+  isEnvelopeVault, isDataKeyVault, makeUnlockError,
+  encryptJson: _encryptJson,
+  decryptVault: _decryptVault,
+  decryptJson: _decryptJson,
+  encryptText, decryptText,
+  encryptBufferWithPassword, decryptBufferWithPassword,
+  encryptWithVaultKey, decryptWithVaultKey,
+  deriveKey, encryptLegacyJson, decryptLegacyJson,
+  verifyDataKeyVaultMaster, generateDataKeySecret,
+} = require("./src/main/crypto");
+
 let loginWindow = null;
 let vaultWindow = null;
 let vaultCache = null;
@@ -14,17 +28,12 @@ let unlockFailures = 0;
 let unlockLockedUntil = 0;
 let isQuitting = false;
 
-const IV_LENGTH = 12;
-const KEY_LENGTH = 32;
-const SALT_LENGTH = 16;
-const PBKDF2_ROUNDS = 250000;
 const FAILED_ATTEMPTS_LIMIT = 5;
+const RECOVERY_ANSWER_MIN_LENGTH = 2;
 const FAILED_ATTEMPT_LOCK_MS = 30000;
 const BACKUP_LIMIT = 10;
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:"]);
 const isMac = process.platform === "darwin";
-const VAULT_FORMAT_V2 = "coco-dense-envelope-v2";
-const VAULT_FORMAT_V3 = "coco-dense-envelope-v3";
 const REMOTE_WRITE_VERIFY_ATTEMPTS = 6;
 const REMOTE_WRITE_VERIFY_DELAY_MS = 700;
 const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/is-coco/coco-dense/releases/latest";
@@ -66,269 +75,21 @@ function stableJsonHash(value) {
   return crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
 }
 
-function deriveKey(masterPassword, saltBase64, rounds = PBKDF2_ROUNDS) {
-  return crypto.pbkdf2Sync(
-    String(masterPassword ?? ""),
-    Buffer.from(saltBase64, "base64"),
-    rounds,
-    KEY_LENGTH,
-    "sha256",
-  );
-}
-
-function encryptLegacyJson(masterPassword, payload) {
-  const salt = crypto.randomBytes(SALT_LENGTH);
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = crypto.pbkdf2Sync(String(masterPassword ?? ""), salt, PBKDF2_ROUNDS, KEY_LENGTH, "sha256");
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const plaintext = Buffer.from(JSON.stringify(payload), "utf8");
-  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag();
-
-  return {
-    version: 1,
-    kdf: "pbkdf2",
-    rounds: PBKDF2_ROUNDS,
-    salt: salt.toString("base64"),
-    iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
-    data: encrypted.toString("base64"),
-  };
-}
-
-function decryptLegacyJson(masterPassword, vault) {
-  const key = deriveKey(masterPassword, vault.salt, vault.rounds || PBKDF2_ROUNDS);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(vault.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(vault.tag, "base64"));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(vault.data, "base64")),
-    decipher.final(),
-  ]);
-  return JSON.parse(decrypted.toString("utf8"));
-}
-
-function encryptBufferWithPassword(masterPassword, buffer) {
-  const salt = crypto.randomBytes(SALT_LENGTH);
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = crypto.pbkdf2Sync(String(masterPassword ?? ""), salt, PBKDF2_ROUNDS, KEY_LENGTH, "sha256");
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
-  const tag = cipher.getAuthTag();
-
-  return {
-    version: 1,
-    kdf: "pbkdf2",
-    rounds: PBKDF2_ROUNDS,
-    salt: salt.toString("base64"),
-    iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
-    data: encrypted.toString("base64"),
-  };
-}
-
-function decryptBufferWithPassword(masterPassword, wrapped) {
-  const key = deriveKey(masterPassword, wrapped.salt, wrapped.rounds || PBKDF2_ROUNDS);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(wrapped.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(wrapped.tag, "base64"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(wrapped.data, "base64")),
-    decipher.final(),
-  ]);
-}
-
-function encryptWithVaultKey(vaultKey, payload) {
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv("aes-256-gcm", vaultKey, iv);
-  const plaintext = Buffer.from(JSON.stringify(payload ?? null), "utf8");
-  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag();
-
-  return {
-    version: 1,
-    alg: "aes-256-gcm",
-    iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
-    data: encrypted.toString("base64"),
-  };
-}
-
-function decryptWithVaultKey(vaultKey, wrapped) {
-  const decipher = crypto.createDecipheriv("aes-256-gcm", vaultKey, Buffer.from(wrapped.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(wrapped.tag, "base64"));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(wrapped.data, "base64")),
-    decipher.final(),
-  ]);
-  return JSON.parse(decrypted.toString("utf8"));
-}
-
-function isEnvelopeVault(vault) {
-  return vault?.version === 2 && vault?.format === VAULT_FORMAT_V2 && vault?.key;
-}
-
-function isDataKeyVault(vault) {
-  return vault?.version === 3 && vault?.format === VAULT_FORMAT_V3 && vault?.auth && vault?.key;
-}
-
-function makeUnlockError(message, code) {
-  const error = new Error(message);
-  error.code = code;
-  return error;
-}
-
+// Crypto functions imported from src/main/crypto.js
+// Thin wrappers to inject activeDataKey as default for vault decryption
 function encryptJson(masterPassword, payload, options = {}) {
-  const vaultKey = options.vaultKey || crypto.randomBytes(KEY_LENGTH);
-  const dataKey = String(options.dataKey ?? "").trim();
-  const useDataKeyVault = Boolean(options.format === "v3" || dataKey);
-  const now = new Date().toISOString();
-  const meta = {
-    version: payload?.version || 1,
-    createdAt: payload?.createdAt || now,
-    updatedAt: payload?.updatedAt || now,
-  };
-  const entries = Array.isArray(payload?.entries) ? payload.entries : [];
-
-  if (useDataKeyVault) {
-    if (!dataKey) {
-      throw new Error("请先设置数据钥匙");
-    }
-    return {
-      version: 3,
-      format: VAULT_FORMAT_V3,
-      auth: {
-        version: 1,
-        wrapped: encryptBufferWithPassword(masterPassword, crypto.randomBytes(KEY_LENGTH)),
-      },
-      key: encryptBufferWithPassword(dataKey, vaultKey),
-      meta: encryptWithVaultKey(vaultKey, meta),
-      settings: encryptWithVaultKey(vaultKey, payload?.settings || {}),
-      entries: entries.map((entry) => ({
-        id: String(entry?.id ?? ""),
-        updatedAt: String(entry?.updatedAt || entry?.lastUsedAt || entry?.createdAt || ""),
-        deletedAt: String(entry?.deletedAt || ""),
-        sealed: encryptWithVaultKey(vaultKey, entry),
-      })),
-    };
-  }
-
-  return {
-    version: 2,
-    format: VAULT_FORMAT_V2,
-    key: encryptBufferWithPassword(masterPassword, vaultKey),
-    meta: encryptWithVaultKey(vaultKey, meta),
-    settings: encryptWithVaultKey(vaultKey, payload?.settings || {}),
-    entries: entries.map((entry) => ({
-      id: String(entry?.id ?? ""),
-      updatedAt: String(entry?.updatedAt || entry?.lastUsedAt || entry?.createdAt || ""),
-      deletedAt: String(entry?.deletedAt || ""),
-      sealed: encryptWithVaultKey(vaultKey, entry),
-    })),
-  };
-}
-
-function verifyDataKeyVaultMaster(masterPassword, vault) {
-  try {
-    decryptBufferWithPassword(masterPassword, vault.auth.wrapped);
-    return true;
-  } catch {
-    return false;
-  }
+  return _encryptJson(masterPassword, payload, options);
 }
 
 function decryptVault(masterPassword, vault, options = {}) {
-  if (isDataKeyVault(vault)) {
-    if (!verifyDataKeyVaultMaster(masterPassword, vault)) {
-      throw makeUnlockError("密码错误", "MASTER_PASSWORD_INVALID");
-    }
-    const dataKey = String(options.dataKey ?? activeDataKey ?? "").trim();
-    if (!dataKey) {
-      throw makeUnlockError("请输入数据钥匙", "DATA_KEY_REQUIRED");
-    }
-    let vaultKey = null;
-    try {
-      vaultKey = decryptBufferWithPassword(dataKey, vault.key);
-    } catch {
-      throw makeUnlockError("数据钥匙不正确", "DATA_KEY_INVALID");
-    }
-    const meta = decryptWithVaultKey(vaultKey, vault.meta);
-    const settings = vault.settings ? decryptWithVaultKey(vaultKey, vault.settings) : {};
-    const entries = Array.isArray(vault.entries)
-      ? vault.entries.map((item) => decryptWithVaultKey(vaultKey, item.sealed))
-      : [];
-    return {
-      legacy: false,
-      dataKeyVault: true,
-      vaultKey,
-      payload: {
-        version: meta?.version || 1,
-        createdAt: meta?.createdAt || new Date().toISOString(),
-        updatedAt: meta?.updatedAt || new Date().toISOString(),
-        entries,
-        settings,
-      },
-    };
-  }
-
-  if (isEnvelopeVault(vault)) {
-    const vaultKey = decryptBufferWithPassword(masterPassword, vault.key);
-    const meta = decryptWithVaultKey(vaultKey, vault.meta);
-    const settings = vault.settings ? decryptWithVaultKey(vaultKey, vault.settings) : {};
-    const entries = Array.isArray(vault.entries)
-      ? vault.entries.map((item) => decryptWithVaultKey(vaultKey, item.sealed))
-      : [];
-    return {
-      legacy: false,
-      vaultKey,
-      payload: {
-        version: meta?.version || 1,
-        createdAt: meta?.createdAt || new Date().toISOString(),
-        updatedAt: meta?.updatedAt || new Date().toISOString(),
-        entries,
-        settings,
-      },
-    };
-  }
-
-  return {
-    legacy: true,
-    vaultKey: null,
-    payload: decryptLegacyJson(masterPassword, vault),
-  };
+  const merged = { dataKey: activeDataKey, ...options };
+  return _decryptVault(masterPassword, vault, merged);
 }
 
 function decryptJson(masterPassword, vault, options = {}) {
   return decryptVault(masterPassword, vault, options).payload;
 }
 
-function encryptText(secret, text) {
-  const salt = crypto.randomBytes(SALT_LENGTH);
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const key = crypto.pbkdf2Sync(String(secret ?? ""), salt, PBKDF2_ROUNDS, KEY_LENGTH, "sha256");
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(String(text ?? ""), "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-
-  return {
-    version: 1,
-    kdf: "pbkdf2",
-    rounds: PBKDF2_ROUNDS,
-    salt: salt.toString("base64"),
-    iv: iv.toString("base64"),
-    tag: tag.toString("base64"),
-    data: encrypted.toString("base64"),
-  };
-}
-
-function decryptText(secret, wrapped) {
-  const key = deriveKey(secret, wrapped.salt);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(wrapped.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(wrapped.tag, "base64"));
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(wrapped.data, "base64")),
-    decipher.final(),
-  ]);
-  return decrypted.toString("utf8");
-}
 
 function defaultVault() {
   return {
@@ -376,6 +137,61 @@ function getSyncConfigFilePath() {
 
 function getBiometricFilePath() {
   return path.join(app.getPath("userData"), "biometric.json");
+}
+
+function getFolderUiFilePath() {
+  return path.join(app.getPath("userData"), "folder-ui.json");
+}
+
+function loadFolderUiFile() {
+  try {
+    const filePath = getFolderUiFilePath();
+    if (!fs.existsSync(filePath)) return {};
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!raw || typeof raw !== "object") return {};
+    const next = {};
+    Object.entries(raw).forEach(([folderId, value]) => {
+      if (folderId) next[folderId] = { collapsed: Boolean(value?.collapsed) };
+    });
+    return next;
+  } catch {
+    return {};
+  }
+}
+
+function saveFolderUiFile(folderUi) {
+  try {
+    const filePath = getFolderUiFilePath();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(folderUi || {}, null, 2), "utf8");
+  } catch { /* ignore */ }
+}
+
+function getUpdateProxyFilePath() {
+  return path.join(app.getPath("userData"), "update-proxy.json");
+}
+
+function loadUpdateProxy() {
+  try {
+    const filePath = getUpdateProxyFilePath();
+    if (!fs.existsSync(filePath)) return "";
+    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return String(raw?.proxyUrl || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function saveUpdateProxy(proxyUrl) {
+  try {
+    const filePath = getUpdateProxyFilePath();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify({ proxyUrl: String(proxyUrl || "").trim() }, null, 2), "utf8");
+  } catch { /* ignore */ }
+}
+
+function getUpdateReminderFilePath() {
+  return path.join(app.getPath("userData"), "update-reminder.json");
 }
 
 function getDataKeyFilePath() {
@@ -572,15 +388,27 @@ function webdavAuthHeader(config) {
 }
 
 async function webdavRequest(config, method, remotePath, options = {}) {
-  const response = await fetch(buildWebdavUrl(config, remotePath), {
-    method,
-    headers: {
-      Authorization: webdavAuthHeader(config),
-      ...options.headers,
-    },
-    body: options.body,
-  });
-  return response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 30000);
+  try {
+    const response = await fetch(buildWebdavUrl(config, remotePath), {
+      method,
+      headers: {
+        Authorization: webdavAuthHeader(config),
+        ...options.headers,
+      },
+      body: options.body,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return { ok: false, status: 0, error: "请求超时" };
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function webdavStatusError(status, fallback) {
@@ -615,23 +443,65 @@ function comparableEntryTime(entry) {
 }
 
 function mergeVaultPayloads(localPayload, remotePayload) {
-  const byId = new Map();
-  [...(remotePayload?.entries || []), ...(localPayload?.entries || [])].forEach((entry) => {
-    if (!entry?.id) return;
-    const current = byId.get(entry.id);
-    if (!current || comparableEntryTime(entry) >= comparableEntryTime(current)) {
-      byId.set(entry.id, entry);
+  const localMap = new Map();
+  const remoteMap = new Map();
+  (localPayload?.entries || []).forEach((e) => { if (e?.id) localMap.set(e.id, e); });
+  (remotePayload?.entries || []).forEach((e) => { if (e?.id) remoteMap.set(e.id, e); });
+
+  const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+  const merged = [];
+  const conflicts = [];
+
+  for (const id of allIds) {
+    const local = localMap.get(id);
+    const remote = remoteMap.get(id);
+    if (local && remote) {
+      const localTime = comparableEntryTime(local);
+      const remoteTime = comparableEntryTime(remote);
+      if (localTime !== remoteTime) {
+        conflicts.push({
+          id,
+          site: local.site || remote.site || "",
+          localTime,
+          remoteTime,
+          winner: localTime > remoteTime ? "local" : "remote",
+        });
+      }
+      merged.push(localTime >= remoteTime ? local : remote);
+    } else {
+      merged.push(local || remote);
     }
-  });
-  const localTime = Date.parse(localPayload?.updatedAt || "") || 0;
-  const remoteTime = Date.parse(remotePayload?.updatedAt || "") || 0;
+  }
+
+  const localSettings = localPayload?.settings || {};
+  const remoteSettings = remotePayload?.settings || {};
+  const settingsKeys = new Set([...Object.keys(localSettings), ...Object.keys(remoteSettings)]);
+  const mergedSettings = {};
+  for (const key of settingsKeys) {
+    const localVal = localSettings[key];
+    const remoteVal = remoteSettings[key];
+    if (localVal === undefined) {
+      mergedSettings[key] = remoteVal;
+    } else if (remoteVal === undefined) {
+      mergedSettings[key] = localVal;
+    } else if (JSON.stringify(localVal) === JSON.stringify(remoteVal)) {
+      mergedSettings[key] = localVal;
+    } else {
+      mergedSettings[key] = localVal;
+      conflicts.push({ type: "setting", key, note: "取本地值" });
+    }
+  }
+
   const now = new Date().toISOString();
   return {
-    version: 1,
-    createdAt: localPayload?.createdAt || remotePayload?.createdAt || now,
-    updatedAt: now,
-    entries: Array.from(byId.values()),
-    settings: localTime >= remoteTime ? localPayload?.settings : remotePayload?.settings,
+    payload: {
+      version: 1,
+      createdAt: localPayload?.createdAt || remotePayload?.createdAt || now,
+      updatedAt: now,
+      entries: merged,
+      settings: mergedSettings,
+    },
+    conflicts,
   };
 }
 
@@ -730,9 +600,7 @@ async function writeRemoteVault(config, wrapped) {
       if (stableJsonHash(remoteWrapped) === expectedHash) {
         return { ok: true, lastSyncedAt: touchSyncLastSyncedAt(config) };
       }
-    } catch {
-      // Keep retrying until WebDAV returns the JSON we just wrote.
-    }
+    } catch (error) { console.error("Operation failed:", error?.message || error); }
   }
 
   return {
@@ -843,9 +711,6 @@ function deleteBiometricFile() {
   fs.unlinkSync(filePath);
 }
 
-function generateDataKeySecret() {
-  return crypto.randomBytes(32).toString("base64url");
-}
 
 function writeRememberedDataKeyFile(dataKey) {
   const value = String(dataKey ?? "").trim();
@@ -1160,9 +1025,7 @@ function trimBackups() {
   files.slice(BACKUP_LIMIT).forEach((file) => {
     try {
       fs.unlinkSync(file.fullPath);
-    } catch {
-      // ignore cleanup errors
-    }
+    } catch (error) { console.error("Operation failed:", error?.message || error); }
   });
 }
 
@@ -1282,9 +1145,16 @@ async function downloadReleaseAsset(assetUrl, assetName, assetSize = 0, onProgre
 
   const filePath = path.join(app.getPath("downloads"), safeDownloadName(assetName));
   const totalBytes = Number(assetSize) || 0;
-  const downloadUrls = [parsed.href];
+  const proxyUrl = loadUpdateProxy();
+  const downloadUrls = [];
+  if (proxyUrl) {
+    downloadUrls.push(proxyUrl + parsed.href);
+  }
+  downloadUrls.push(parsed.href);
   for (const mirror of GITHUB_DOWNLOAD_MIRRORS) {
-    downloadUrls.push(mirror + parsed.href);
+    if (!proxyUrl || mirror !== proxyUrl) {
+      downloadUrls.push(mirror + parsed.href);
+    }
   }
 
   let lastError = null;
@@ -1317,6 +1187,7 @@ async function downloadReleaseAsset(assetUrl, assetName, assetSize = 0, onProgre
         clearTimeout(timeout);
         if (fetchErr?.name === "AbortError") {
           if (downloadCancelledByUser) {
+            onProgress({ stage: "cancelled", downloadedBytes: 0, totalBytes });
             currentDownloadController = null;
             currentDownloadFilePath = null;
             return { ok: false, error: "下载已取消", cancelled: true };
@@ -1369,6 +1240,7 @@ async function downloadReleaseAsset(assetUrl, assetName, assetSize = 0, onProgre
         await pipeline(Readable.fromWeb(response.body), progressStream, fs.createWriteStream(filePath));
       } catch (pipeErr) {
         if (downloadCancelledByUser) {
+          onProgress({ stage: "cancelled", downloadedBytes, totalBytes });
           currentDownloadController = null;
           currentDownloadFilePath = null;
           return { ok: false, error: "下载已取消", cancelled: true };
@@ -1782,6 +1654,47 @@ function wireWindowControls() {
     platform: process.platform,
     arch: process.arch,
   }));
+  ipcMain.handle("folderUi:get", () => loadFolderUiFile());
+  ipcMain.handle("folderUi:save", (_event, folderUi) => { saveFolderUiFile(folderUi); return { ok: true }; });
+  ipcMain.handle("update:findDownloaded", (_event, assetName) => {
+    try {
+      const name = safeDownloadName(assetName || "");
+      if (!name) return { found: false };
+      const filePath = path.join(app.getPath("downloads"), name);
+      if (fs.existsSync(filePath)) {
+        const stat = fs.statSync(filePath);
+        return { found: true, filePath, size: stat.size };
+      }
+      return { found: false };
+    } catch {
+      return { found: false };
+    }
+  });
+  ipcMain.handle("update:getProxy", () => ({ proxyUrl: loadUpdateProxy() }));
+  ipcMain.handle("update:saveProxy", (_event, proxyUrl) => { saveUpdateProxy(proxyUrl); return { ok: true }; });
+  ipcMain.handle("update:getReminder", () => {
+    try {
+      const filePath = getUpdateReminderFilePath();
+      if (!fs.existsSync(filePath)) return { mutedDate: "", mutedVersion: "" };
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      return {
+        mutedDate: String(raw?.mutedDate || ""),
+        mutedVersion: String(raw?.mutedVersion || ""),
+      };
+    } catch {
+      return { mutedDate: "", mutedVersion: "" };
+    }
+  });
+  ipcMain.handle("update:saveReminder", (_event, reminderState) => {
+    try {
+      const filePath = getUpdateReminderFilePath();
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify(reminderState || {}, null, 2), "utf8");
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
   ipcMain.handle("update:check", async () => {
     try {
       const latest = await fetchLatestRelease();
@@ -2041,9 +1954,12 @@ ipcMain.handle("update:cancelDownload", () => {
       if (!remoteResult.ok) return remoteResult;
 
       let nextPayload = localPayload;
+      let mergeConflicts = [];
       let remoteWrapped = null;
       if (remoteResult.exists) {
-        nextPayload = mergeVaultPayloads(localPayload, remoteResult.payload);
+        const mergeResult = mergeVaultPayloads(localPayload, remoteResult.payload);
+        nextPayload = mergeResult.payload;
+        mergeConflicts = mergeResult.conflicts || [];
         remoteWrapped = encryptVaultForSave(masterPassword, nextPayload);
       } else {
         remoteWrapped = encryptVaultForSave(masterPassword, localPayload);
@@ -2057,10 +1973,13 @@ ipcMain.handle("update:cancelDownload", () => {
       const uploadResult = await writeRemoteVault(config, remoteWrapped);
       if (!uploadResult.ok) return uploadResult;
       applySyncedVault(masterPassword, nextPayload, remoteWrapped);
+      const entryConflicts = mergeConflicts.filter((c) => !c.type);
       return {
         ok: true,
         vault: nextPayload,
         merged: remoteResult.exists,
+        conflicts: entryConflicts.length > 0 ? entryConflicts : undefined,
+        conflictCount: entryConflicts.length || undefined,
         lastSyncedAt: uploadResult.lastSyncedAt,
         lastCheckedAt: uploadResult.lastSyncedAt,
       };
@@ -2207,8 +2126,8 @@ ipcMain.handle("update:cancelDownload", () => {
     if (questionList.length !== 1 || questionList.some((item) => !item)) {
       return { ok: false, error: "请先选择一个安全问题" };
     }
-    if (answerList.length !== 1 || answerList.some((item) => !normalizeRecoveryAnswer(item))) {
-      return { ok: false, error: "请填写答案" };
+    if (answerList.length !== 1 || answerList.some((item) => normalizeRecoveryAnswer(item).length < RECOVERY_ANSWER_MIN_LENGTH)) {
+      return { ok: false, error: `安全问题答案至少需要 ${RECOVERY_ANSWER_MIN_LENGTH} 个字符` };
     }
     if (!String(masterPassword ?? "").trim()) {
       return { ok: false, error: "请先解锁保险箱" };
@@ -2251,8 +2170,8 @@ ipcMain.handle("update:cancelDownload", () => {
     }
 
     const answerList = Array.isArray(answers) ? answers.map((item) => String(item ?? "")) : [];
-    if (answerList.length !== 1 || answerList.some((item) => !normalizeRecoveryAnswer(item))) {
-      return { ok: false, error: "请填写答案" };
+    if (answerList.length !== 1 || answerList.some((item) => normalizeRecoveryAnswer(item).length < RECOVERY_ANSWER_MIN_LENGTH)) {
+      return { ok: false, error: `安全问题答案至少需要 ${RECOVERY_ANSWER_MIN_LENGTH} 个字符` };
     }
 
     try {
@@ -2362,8 +2281,14 @@ ipcMain.handle("update:cancelDownload", () => {
 
     try {
       const wrapped = encryptVaultForSave(masterPassword, payload);
-      fs.writeFileSync(result.filePath, JSON.stringify(wrapped, null, 2), "utf8");
-      return { ok: true, filePath: result.filePath };
+      const jsonContent = JSON.stringify(wrapped, null, 2);
+      const checksum = crypto.createHash("sha256").update(jsonContent, "utf8").digest("hex");
+      fs.writeFileSync(result.filePath, jsonContent, "utf8");
+      try {
+        fs.writeFileSync(result.filePath + ".sha256", `${checksum}  ${path.basename(result.filePath)}
+`, "utf8");
+      } catch { /* checksum file is best-effort */ }
+      return { ok: true, filePath: result.filePath, checksum };
     } catch (error) {
       if (error?.code === "DATA_KEY_REQUIRED") {
         return { ok: false, error: "请先输入数据钥匙，再导出保险箱" };

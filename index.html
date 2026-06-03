@@ -693,9 +693,9 @@
                             </div>
                             <div class="update-actions">
                               <button class="secondary-btn" type="button" id="checkUpdateBtn">检查更新</button>
-                              <button class="primary-btn" type="button" id="downloadUpdateBtn" disabled>下载并打开</button>
-                              <button class="danger-outline-btn hidden" type="button" id="cancelUpdateBtn">取消下载</button>
+                              <button class="primary-btn" type="button" id="downloadUpdateBtn" disabled>下载</button>
                               <button class="secondary-btn" type="button" id="openReleaseBtn">打开发布页</button>
+                              <button class="secondary-btn" type="button" id="openProxySettingsBtn">代理设置</button>
                             </div>
                           </div>
                         </div>
@@ -849,12 +849,36 @@
           <label>
             答案
             <input id="recoveryAnswer1" type="text" autocomplete="off" placeholder="请输入答案" />
+            <p class="answer-strength-hint" id="recoveryAnswerHint"></p>
           </label>
           <p class="form-error hidden" id="recoverySettingsError" role="alert"></p>
           <div class="modal-actions">
             <button class="secondary-btn" type="button" id="clearRecoveryAnswersBtn">清空</button>
             <button class="secondary-btn" type="button" id="cancelRecoverySettingsBtn">取消</button>
             <button class="primary-btn" type="submit" id="saveRecoveryBtn">保存</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop hidden" id="proxySettingsModal" aria-hidden="true">
+      <section class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="proxySettingsTitle">
+        <div class="modal-head">
+          <div>
+            <p class="eyebrow">更新</p>
+            <h2 id="proxySettingsTitle">下载代理设置</h2>
+          </div>
+          <button class="icon-btn" type="button" id="closeProxySettingsBtn" aria-label="关闭代理设置">×</button>
+        </div>
+        <p class="modal-helper">填写后优先使用此代理下载更新包，留空则使用内置镜像加速。</p>
+        <form class="modal-form" id="proxySettingsForm">
+          <label>
+            代理地址
+            <input id="updateProxyUrl" type="url" autocomplete="off" placeholder="https://ghfast.top/" />
+          </label>
+          <div class="modal-actions">
+            <button class="secondary-btn" type="button" id="cancelProxySettingsBtn">取消</button>
+            <button class="primary-btn" type="submit" id="saveProxySettingsBtn">保存</button>
           </div>
         </form>
       </section>
@@ -953,6 +977,7 @@
       </button>
     </div>
 
+    <script src="./src/renderer/utils.js"></script>
     <script src="./script.js"></script>
   </body>
 </html>

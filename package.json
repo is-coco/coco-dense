@@ -1,6 +1,6 @@
 {
   "name": "coco-dense",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -31,6 +31,7 @@
       "script.js",
       "main.js",
       "preload.js",
+      "src/**/*",
       "assets/**/*",
       "README.md"
     ],

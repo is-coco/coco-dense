@@ -3056,3 +3056,14 @@ textarea::placeholder {
 
 
 
+
+.answer-strength-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  min-height: 16px;
+}
+.answer-strength-hint.strength-weak { color: #ff3b30; }
+.answer-strength-hint.strength-fair { color: #ff9500; }
+.answer-strength-hint.strength-good { color: #34c759; }

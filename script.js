@@ -143,8 +143,13 @@ const updateProgressBar = document.getElementById("updateProgressBar");
 const updateProgressFile = document.getElementById("updateProgressFile");
 const checkUpdateBtn = document.getElementById("checkUpdateBtn");
 const downloadUpdateBtn = document.getElementById("downloadUpdateBtn");
-const cancelUpdateBtn = document.getElementById("cancelUpdateBtn");
 const openReleaseBtn = document.getElementById("openReleaseBtn");
+const proxySettingsModal = document.getElementById("proxySettingsModal");
+const proxySettingsForm = document.getElementById("proxySettingsForm");
+const openProxySettingsBtn = document.getElementById("openProxySettingsBtn");
+const closeProxySettingsBtn = document.getElementById("closeProxySettingsBtn");
+const cancelProxySettingsBtn = document.getElementById("cancelProxySettingsBtn");
+const saveProxySettingsBtn = document.getElementById("saveProxySettingsBtn");
 const updateReminderModal = document.getElementById("updateReminderModal");
 const updateReminderVersion = document.getElementById("updateReminderVersion");
 const updateReminderName = document.getElementById("updateReminderName");
@@ -160,6 +165,7 @@ const closeRecoverySettingsBtn = document.getElementById("closeRecoverySettingsB
 const cancelRecoverySettingsBtn = document.getElementById("cancelRecoverySettingsBtn");
 const recoveryQuestion1 = document.getElementById("recoveryQuestion1");
 const recoveryAnswer1 = document.getElementById("recoveryAnswer1");
+const recoveryAnswerHint = document.getElementById("recoveryAnswerHint");
 const saveRecoveryBtn = document.getElementById("saveRecoveryBtn");
 const clearRecoveryAnswersBtn = document.getElementById("clearRecoveryAnswersBtn");
 const unlockPrimaryBtn = unlockForm.querySelector(".primary-btn");
@@ -181,12 +187,6 @@ const favoriteContextSeparator = favoriteContextButton?.nextElementSibling?.clas
 favoriteContextButton?.remove();
 favoriteContextSeparator?.remove();
 
-const PRIORITY_ORDER = {
-  red: 4,
-  yellow: 3,
-  blue: 2,
-  green: 1,
-};
 
 const FILTER_DEFAULT_LABELS = {
   tag: "全部标签",
@@ -196,6 +196,16 @@ const FILTER_DEFAULT_LABELS = {
 const UPDATE_REMINDER_STORAGE_KEY = "coco-dense-update-reminder";
 
 const SECRET_MASK = "●●●●●●●●";
+
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+
+const SYNC_BUSY_TIMEOUT_MS = 60000;
 
 const SETTINGS_SECTIONS = {
   security: {
@@ -255,12 +265,14 @@ const state = {
   cloudCheckTimer: null,
   cloudCheckBusy: false,
   syncBusy: false,
+  syncBusyTimer: null,
   unlockSyncJob: null,
   persistJob: null,
   persistQueuedPayload: null,
   cloudSyncJob: null,
   cloudSyncQueuedPayload: null,
   syncError: "",
+  syncOffline: false,
   pendingCloudUpdate: false,
   pendingCloudPayload: null,
   pendingCloudUpdatedAt: 0,
@@ -319,35 +331,12 @@ const state = {
   updateReminder: loadUpdateReminderState(),
   updateReminderShownVersion: "",
   updateAutoChecked: false,
+  updateCancelResolver: null,
 };
 
-function normalizePriority(priority) {
-  const value = String(priority ?? "").trim().toLowerCase();
-  if (Object.hasOwn(PRIORITY_ORDER, value)) return value;
-  const alias = {
-    "红色": "red",
-    "黄色": "yellow",
-    "蓝色": "blue",
-    "绿色": "green",
-    high: "red",
-    medium: "yellow",
-    mid: "yellow",
-    normal: "blue",
-    low: "green",
-    1: "red",
-    2: "yellow",
-    3: "blue",
-    4: "green",
-  };
-  return alias[value] || "green";
-}
 
-function buildSearchIndex(entry) {
-  const parts = [entry.site, entry.account, entry.url, entry.tags, entry.notes].filter(Boolean);
-  const baseText = parts.join(" ").toLowerCase();
-  const initials = window.vault?.toPinyinInitials?.(parts.join(" ")) || "";
-  return `${baseText} ${initials}`.trim();
-}
+
+
 
 function getAllTags(entries = getVisibleEntries()) {
   const tags = new Set();
@@ -357,10 +346,7 @@ function getAllTags(entries = getVisibleEntries()) {
   return [...tags].sort((a, b) => a.localeCompare(b, "zh-CN"));
 }
 
-function formatEntryTagLine(value) {
-  const tags = parseTags(value);
-  return tags.length ? tags.join(" · ") : "无标签";
-}
+
 
 function getSuggestedTags(keyword = "") {
   const query = keyword.trim().toLowerCase();
@@ -551,58 +537,9 @@ function renderTagSuggestions() {
   });
 }
 
-function normalizeSettings(settings = {}) {
-  const autoLockMinutesValue = Number(settings.autoLockMinutes);
-  const clipboardSecondsValue = Number(settings.clipboardClearSeconds);
-  const cloudCheckMinutesValue = Number(settings.cloudCheckMinutes);
-  const passwordLengthValue = Number(settings.passwordLength);
-  const seenFolders = new Set();
-  const folders = Array.isArray(settings.folders)
-    ? settings.folders
-      .map((folder) => ({
-        id: String(folder?.id || "").trim(),
-        name: String(folder?.name || "").trim(),
-        priority: normalizePriority(folder?.priority),
-      }))
-      .filter((folder) => {
-        if (!folder.id || !folder.name || seenFolders.has(folder.id)) return false;
-        seenFolders.add(folder.id);
-        return true;
-      })
-    : [];
-  return {
-    autoLockMinutes: Number.isFinite(autoLockMinutesValue) ? autoLockMinutesValue : 5,
-    clipboardClearSeconds: Number.isFinite(clipboardSecondsValue) ? clipboardSecondsValue : 30,
-    cloudCheckMinutes: Number.isFinite(cloudCheckMinutesValue) ? Math.min(240, Math.max(1, cloudCheckMinutesValue)) : 5,
-    passwordLength: Math.min(40, Math.max(8, Number.isFinite(passwordLengthValue) ? passwordLengthValue : 18)),
-    copyConfirm: settings.copyConfirm !== false,
-    welcomeOnStart: settings.welcomeOnStart !== false,
-    backupBeforeExport: settings.backupBeforeExport !== false,
-    folders,
-  };
-}
 
-function normalizeEntry(entry) {
-  const priority = normalizePriority(entry?.priority ?? entry?.priorityColor ?? entry?.priorityLevel ?? entry?.colorLevel);
-  return {
-    id: entry?.id || makeId(entry?.site || "entry"),
-    site: entry?.site || "",
-    account: entry?.account || "",
-    password: entry?.password || "",
-    url: entry?.url || "",
-    tags: entry?.tags || "",
-    notes: entry?.notes || "",
-    folderId: String(entry?.folderId || ""),
-    favorite: Boolean(entry?.favorite),
-    pinned: Boolean(entry?.pinned),
-    priority,
-    createdAt: entry?.createdAt || entry?.lastUsedAt || "",
-    updatedAt: entry?.updatedAt || entry?.lastUsedAt || "",
-    deletedAt: entry?.deletedAt || "",
-    lastUsedAt: entry?.lastUsedAt || "",
-    status: entry?.status || "已同步",
-  };
-}
+
+
 
 function showToast(message) {
   toast.textContent = message;
@@ -790,9 +727,7 @@ function confirmWithin(actionKey, firstMessage, onConfirm, windowMs = 3000) {
   };
 }
 
-function makeId(site) {
-  return `${site || "entry"}-${Date.now().toString(36)}`;
-}
+
 
 function getVaultPayload(options = {}) {
   const shouldTouchUpdatedAt = options.touchUpdatedAt !== false;
@@ -931,6 +866,9 @@ function getSyncStatusMeta() {
     return { state: "warn", label: "同步中" };
   }
   if (state.syncError) {
+    if (state.syncOffline) {
+      return { state: "warn", label: "离线，等待重试" };
+    }
     return { state: "error", label: state.syncError };
   }
   if (!state.unlocked) {
@@ -977,6 +915,7 @@ function setSyncBusy(isBusy) {
 
 function clearSyncError() {
   state.syncError = "";
+  state.syncOffline = false;
   refreshStatusText();
 }
 
@@ -988,8 +927,17 @@ function markSyncChecked(result = {}) {
   };
 }
 
+function isNetworkError(message) {
+  const msg = String(message || "").toLowerCase();
+  return msg.includes("failed to fetch") || msg.includes("networkerror") ||
+    msg.includes("err_name_not_resolved") || msg.includes("err_connection") ||
+    msg.includes("请求超时") || msg.includes("network") || msg.includes("离线") ||
+    msg.includes("econnrefused") || msg.includes("etimedout") || msg.includes("socket hang up");
+}
+
 function setSyncError(message = "同步失败") {
   state.syncError = message;
+  state.syncOffline = isNetworkError(message);
   refreshStatusText();
 }
 
@@ -1015,6 +963,15 @@ function markSyncSucceeded(result = {}) {
     lastCheckedAt,
   };
   clearSyncError();
+}
+
+function notifySyncConflicts(result, successMessage) {
+  const conflictCount = result?.conflictCount || 0;
+  if (conflictCount > 0) {
+    showToast(`同步完成，${conflictCount} 条记录存在冲突已取最新版本`);
+  } else {
+    showToast(successMessage);
+  }
 }
 
 function latestTimestampValue(currentValue, nextValue) {
@@ -1204,6 +1161,15 @@ function syncRecoverySettings() {
   }
   const questions = status.questions || [];
   if (questions[0]) recoveryQuestion1.value = questions[0];
+  if (recoveryAnswer1) {
+    if (configured && !recoveryAnswer1.value.trim()) {
+      recoveryAnswer1.value = SECRET_MASK;
+      recoveryAnswer1.dataset.secretMasked = "true";
+    } else if (!configured) {
+      recoveryAnswer1.value = "";
+      delete recoveryAnswer1.dataset.secretMasked;
+    }
+  }
 }
 
 function syncBiometricSettings() {
@@ -1375,7 +1341,14 @@ function syncUpdateSettings() {
   const notes = String(state.updateInfo?.notes || "").trim();
   if (currentVersionText) currentVersionText.textContent = currentVersion ? `v${currentVersion}` : "--";
   if (latestVersionText) latestVersionText.textContent = latestVersion ? `v${latestVersion}` : "--";
-  if (downloadUpdateBtn) downloadUpdateBtn.disabled = state.updateDownloading || !updateAvailable || !state.updateInfo?.assetUrl;
+  if (downloadUpdateBtn) {
+    const hasInstallMode = downloadUpdateBtn.dataset?.installMode === "true";
+    const hasAsset = Boolean(state.updateInfo?.assetUrl);
+    downloadUpdateBtn.disabled = state.updateDownloading || (!updateAvailable && !hasInstallMode) || (!hasAsset && !hasInstallMode);
+    if (!state.updateDownloading && !hasInstallMode) {
+      downloadUpdateBtn.textContent = "下载";
+    }
+  }
   if (updateStatusPill) {
     const progressStage = state.updateDownloadProgress?.stage || "";
     const failed = progressStage === "error";
@@ -1447,6 +1420,17 @@ async function checkForAppUpdates() {
       return false;
     }
     state.updateInfo = result;
+    if (result?.assetName) {
+      const existing = await window.vault?.findDownloadedUpdate?.(result.assetName);
+      if (existing?.found && existing.filePath) {
+        state.downloadedFilePath = existing.filePath;
+        if (downloadUpdateBtn) {
+          downloadUpdateBtn.disabled = false;
+          downloadUpdateBtn.textContent = "安装";
+          downloadUpdateBtn.dataset.installMode = "true";
+        }
+      }
+    }
     if (result.updateAvailable && !shouldMuteUpdateReminder(result)) {
       showUpdateReminder(result);
     }
@@ -1475,15 +1459,11 @@ async function downloadAppUpdate() {
   };
   if (downloadUpdateBtn) {
     downloadUpdateBtn.disabled = true;
-    downloadUpdateBtn.textContent = "下载中";
+    downloadUpdateBtn.textContent = "取消";
+downloadUpdateBtn.dataset.downloading = "true";
     delete downloadUpdateBtn.dataset.installMode;
   }
   state.downloadedFilePath = "";
-  if (cancelUpdateBtn) {
-    cancelUpdateBtn.classList.remove("hidden");
-    cancelUpdateBtn.disabled = false;
-    cancelUpdateBtn.textContent = "取消下载";
-  }
   if (updateStatusText) updateStatusText.textContent = "正在下载安装包，完成后会自动打开。";
   syncUpdateSettings();
   try {
@@ -1506,23 +1486,18 @@ async function downloadAppUpdate() {
     } else {
       if (downloadUpdateBtn) {
         downloadUpdateBtn.disabled = false;
-        downloadUpdateBtn.textContent = "安装更新";
+        downloadUpdateBtn.textContent = "安装";
         downloadUpdateBtn.dataset.installMode = "true";
       }
       if (updateStatusText) updateStatusText.textContent = `安装包已下载：${result.filePath || ""}`;
-      showToast('安装包已下载，点击"安装更新"即可安装');
+      showToast('安装包已下载，点击"安装"即可安装');
     }
     syncUpdateSettings();
   } finally {
     state.updateDownloading = false;
     if (downloadUpdateBtn && downloadUpdateBtn.dataset?.installMode !== "true") {
-      downloadUpdateBtn.textContent = "下载并打开";
+      downloadUpdateBtn.textContent = "下载";
       downloadUpdateBtn.disabled = false;
-    }
-    if (cancelUpdateBtn) {
-      cancelUpdateBtn.classList.add("hidden");
-      cancelUpdateBtn.textContent = "取消下载";
-      cancelUpdateBtn.disabled = false;
     }
     syncUpdateSettings();
   }
@@ -1562,7 +1537,9 @@ function canRunCloudSyncCheck() {
     state.unlocked &&
       state.masterPassword &&
       !state.vaultCorrupted &&
-      state.syncConfig?.configured,
+      state.syncConfig?.configured &&
+      !state.syncBusy &&
+      !state.unlockSyncJob,
   );
 }
 
@@ -1666,7 +1643,7 @@ async function syncLocalMutationToCloud(payload = getVaultPayload()) {
       if (result.vault) {
         loadVaultPayload(result.vault, { preserveView: true });
       }
-      markSyncSucceeded(result);
+      notifySyncConflicts(result, "自动同步完成");
       return true;
     }
 
@@ -1684,7 +1661,7 @@ async function syncLocalMutationToCloud(payload = getVaultPayload()) {
         if (mergeResult.vault) {
           loadVaultPayload(mergeResult.vault, { preserveView: true });
         }
-        markSyncSucceeded(mergeResult);
+        notifySyncConflicts(mergeResult, "自动合并完成");
         return true;
       }
       setSyncError(result?.error || "自动同步失败");
@@ -1744,7 +1721,7 @@ async function syncCloudAfterUnlock() {
       markSyncSucceeded(result);
       await refreshWebdavConfig();
       refreshStatusText();
-      showToast(result.merged ? "已同步云端最新数据" : "已完成云端同步");
+      notifySyncConflicts(result, result.merged ? "已同步云端最新数据" : "已完成云端同步");
       return true;
     } finally {
       setSyncBusy(false);
@@ -1934,7 +1911,7 @@ async function mergeWebdavNow() {
   await window.vault?.saveSyncConfig?.(syncConfig);
   await refreshWebdavConfig();
   setSyncBusy(false);
-  showToast(result.merged ? "已合并并同步" : "已合并到坚果云");
+  notifySyncConflicts(result, result.merged ? "已合并并同步" : "已合并到坚果云");
   touchActivity();
 }
 
@@ -2034,6 +2011,11 @@ function openRecoverySettingsModal() {
   }
   recoverySettingsError.textContent = "";
   recoverySettingsError.classList.add("hidden");
+  if (recoveryAnswer1 && state.recoveryStatus?.configured) {
+    recoveryAnswer1.value = SECRET_MASK;
+    recoveryAnswer1.dataset.secretMasked = "true";
+  }
+  syncRecoveryAnswerHint();
   recoverySettingsModal.classList.remove("hidden");
   recoverySettingsModal.setAttribute("aria-hidden", "false");
   recoveryQuestion1.focus({ preventScroll: true });
@@ -2052,12 +2034,7 @@ function showRecoverySettingsError(message) {
   recoverySettingsError.classList.remove("hidden");
 }
 
-function normalizeUrl(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-  if (/^https?:\/\//i.test(raw)) return raw;
-  return `https://${raw}`;
-}
+
 
 function scorePassword(value) {
   const password = String(value ?? "");
@@ -2074,20 +2051,9 @@ function scorePassword(value) {
   return { level: 3, label: "很强" };
 }
 
-function priorityScore(priority) {
-  return PRIORITY_ORDER[priority] ?? 0;
-}
 
-function sortEntries(entries) {
-  return [...entries].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-    const priorityDelta = priorityScore(b.priority) - priorityScore(a.priority);
-    if (priorityDelta !== 0) return priorityDelta;
-    const aTime = new Date(a.lastUsedAt || 0).getTime();
-    const bTime = new Date(b.lastUsedAt || 0).getTime();
-    return bTime - aTime;
-  });
-}
+
+
 
 function loadFolderUiState() {
   try {
@@ -2122,12 +2088,41 @@ function loadUpdateReminderState() {
   }
 }
 
+async function loadFolderUiFromFile() {
+  try {
+    const result = await window.vault?.getFolderUi?.();
+    if (result && typeof result === "object" && Object.keys(result).length > 0) {
+      state.folderUi = result;
+    }
+  } catch { /* use fallback from localStorage */ }
+}
+
+async function loadUpdateProxySettings() {
+  try {
+    const result = await window.vault?.getUpdateProxy?.();
+    if (result?.proxyUrl !== undefined && updateProxyUrl) {
+      updateProxyUrl.value = result.proxyUrl;
+    }
+  } catch { /* ignore */ }
+}
+
+async function loadUpdateReminderFromFile() {
+  try {
+    const result = await window.vault?.getUpdateReminder?.();
+    if (result && typeof result === "object") {
+      state.updateReminder = {
+        mutedDate: String(result.mutedDate || ""),
+        mutedVersion: String(result.mutedVersion || ""),
+      };
+    }
+  } catch { /* use fallback from localStorage */ }
+}
+
 function saveUpdateReminderState() {
   try {
     window.localStorage?.setItem(UPDATE_REMINDER_STORAGE_KEY, JSON.stringify(state.updateReminder || {}));
-  } catch {
-    // ignore local persistence errors
-  }
+  } catch (error) { console.error("Operation failed:", error?.message || error); }
+  window.vault?.saveUpdateReminder?.(state.updateReminder || {}).catch(() => {});
 }
 
 function getTodayReminderKey() {
@@ -2189,9 +2184,8 @@ function dismissUpdateReminderToday() {
 function saveFolderUiState() {
   try {
     window.localStorage?.setItem("coco-dense-folder-ui", JSON.stringify(state.folderUi || {}));
-  } catch {
-    // ignore local persistence errors
-  }
+  } catch (error) { console.error("Operation failed:", error?.message || error); }
+  window.vault?.saveFolderUi?.(state.folderUi || {}).catch(() => {});
 }
 
 function getFolders() {
@@ -2834,6 +2828,9 @@ async function saveRecoverySettings(event) {
     questions: Array.isArray(result.status?.questions) ? result.status.questions : [],
     updatedAt: result.status?.updatedAt || "",
   };
+  if (recoveryAnswer1) {
+    delete recoveryAnswer1.dataset.secretMasked;
+  }
   syncRecoverySettings();
   closeRecoverySettingsModal();
   showToast("安全问题已保存");
@@ -3364,12 +3361,7 @@ function clearForm() {
   setDetailMode("welcome");
 }
 
-function parseTags(value) {
-  return value
-    .split(/[、/|;；,\s]+/)
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-}
+
 
 function renderTagPreview() {
   tagPreview.innerHTML = "";
@@ -3759,6 +3751,47 @@ dataKeyInput?.addEventListener("blur", () => {
   }
 });
 
+
+function syncRecoveryAnswerHint() {
+  if (!recoveryAnswerHint) return;
+  if (recoveryAnswer1?.dataset?.secretMasked === "true") {
+    recoveryAnswerHint.textContent = "";
+    recoveryAnswerHint.className = "answer-strength-hint";
+    return;
+  }
+  const answer = (recoveryAnswer1?.value || "").trim();
+  if (!answer) {
+    recoveryAnswerHint.textContent = "";
+    recoveryAnswerHint.className = "answer-strength-hint";
+    return;
+  }
+  const len = answer.length;
+  if (len < 2) {
+    recoveryAnswerHint.textContent = "至少 2 个字符";
+    recoveryAnswerHint.className = "answer-strength-hint strength-weak";
+  } else if (len < 6) {
+    recoveryAnswerHint.textContent = "建议 6 个字符以上";
+    recoveryAnswerHint.className = "answer-strength-hint strength-fair";
+  } else {
+    recoveryAnswerHint.textContent = "强度足够";
+    recoveryAnswerHint.className = "answer-strength-hint strength-good";
+  }
+}
+recoveryAnswer1?.addEventListener("input", syncRecoveryAnswerHint);
+recoveryAnswer1?.addEventListener("focus", () => {
+  if (recoveryAnswer1.dataset.secretMasked === "true") {
+    recoveryAnswer1.value = "";
+    delete recoveryAnswer1.dataset.secretMasked;
+  }
+  syncRecoveryAnswerHint();
+});
+recoveryAnswer1?.addEventListener("blur", () => {
+  if (!recoveryAnswer1.value.trim() && state.recoveryStatus?.configured) {
+    recoveryAnswer1.value = SECRET_MASK;
+    recoveryAnswer1.dataset.secretMasked = "true";
+  }
+  syncRecoveryAnswerHint();
+});
 openRecoverySettingsBtn?.addEventListener("click", openRecoverySettingsModal);
 clearRecoveryAnswersBtn?.addEventListener("click", () => {
   recoveryAnswer1.value = "";
@@ -3879,43 +3912,95 @@ mergeWebdavBtn?.addEventListener("click", () => {
   mergeWebdavNow();
 });
 
+function openProxySettingsModal() {
+  if (!proxySettingsModal) return;
+  proxySettingsModal.classList.remove("hidden");
+  proxySettingsModal.setAttribute("aria-hidden", "false");
+  updateProxyUrl?.focus();
+}
+
+function closeProxySettingsModal() {
+  if (!proxySettingsModal) return;
+  proxySettingsModal.classList.add("hidden");
+  proxySettingsModal.setAttribute("aria-hidden", "true");
+}
+
+openProxySettingsBtn?.addEventListener("click", openProxySettingsModal);
+closeProxySettingsBtn?.addEventListener("click", closeProxySettingsModal);
+cancelProxySettingsBtn?.addEventListener("click", closeProxySettingsModal);
+proxySettingsModal?.addEventListener("click", (event) => {
+  if (event.target === proxySettingsModal) closeProxySettingsModal();
+});
+proxySettingsForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await window.vault?.saveUpdateProxy?.(updateProxyUrl?.value.trim() || "");
+  closeProxySettingsModal();
+  showToast("代理设置已保存");
+});
+
 checkUpdateBtn?.addEventListener("click", () => {
   checkForAppUpdates();
 });
 
 downloadUpdateBtn?.addEventListener("click", async () => {
-  if (downloadUpdateBtn?.dataset?.installMode === "true" && state.downloadedFilePath) {
-    await window.vault?.installDownloaded?.(state.downloadedFilePath);
-    if (updateStatusText) updateStatusText.textContent = "正在打开安装包...";
+  if (state.updateDownloading) {
+    await cancelCurrentUpdate();
+    return;
+  }
+  if (downloadUpdateBtn?.dataset?.installMode === "true") {
+    if (state.downloadedFilePath) {
+      await window.vault?.installDownloaded?.(state.downloadedFilePath);
+      if (updateStatusText) updateStatusText.textContent = "正在打开安装包...";
+    } else {
+      downloadUpdateBtn.textContent = "下载";
+      delete downloadUpdateBtn.dataset.installMode;
+      downloadAppUpdate();
+    }
     return;
   }
   downloadAppUpdate();
 });
 
-cancelUpdateBtn?.addEventListener("click", async () => {
+async function cancelCurrentUpdate() {
   if (!state.updateDownloading) return;
-  cancelUpdateBtn.disabled = true;
-  cancelUpdateBtn.textContent = "取消中...";
+  if (downloadUpdateBtn) {
+    downloadUpdateBtn.disabled = true;
+    downloadUpdateBtn.textContent = "取消中...";
+  }
   if (updateProgressBar) updateProgressBar.style.width = "0%";
   if (updateProgressPercent) updateProgressPercent.textContent = "0%";
   if (updateProgressMeta) updateProgressMeta.textContent = "已取消";
-  await window.vault?.cancelUpdateDownload?.();
-  await new Promise((r) => setTimeout(r, 3000));
+  await new Promise((resolve) => {
+    state.updateCancelResolver = resolve;
+    const timeout = setTimeout(() => {
+      state.updateCancelResolver = null;
+      resolve();
+    }, 5000);
+    window.vault?.cancelUpdateDownload?.().then(() => {
+      clearTimeout(timeout);
+      setTimeout(() => {
+        if (state.updateCancelResolver) {
+          state.updateCancelResolver = null;
+          resolve();
+        }
+      }, 500);
+    });
+  });
   state.updateDownloading = false;
   state.updateDownloadProgress = null;
   if (downloadUpdateBtn) {
     downloadUpdateBtn.disabled = false;
-    downloadUpdateBtn.textContent = "下载并打开";
+    downloadUpdateBtn.textContent = "下载";
   }
-  if (cancelUpdateBtn) {
-    cancelUpdateBtn.classList.add("hidden");
-    cancelUpdateBtn.textContent = "取消下载";
-    cancelUpdateBtn.disabled = false;
+  if (downloadUpdateBtn) {
+    downloadUpdateBtn.textContent = "下载";
+    downloadUpdateBtn.disabled = false;
+    delete downloadUpdateBtn.dataset.downloading;
   }
   if (updateProgressPanel) updateProgressPanel.classList.add("hidden");
   if (updateStatusText) updateStatusText.textContent = "下载已取消";
   syncUpdateSettings();
-});
+}
 
 openReleaseBtn?.addEventListener("click", () => {
   openReleasePage();
@@ -3958,10 +4043,11 @@ deleteEntryBtn.addEventListener("click", () => {
   });
 });
 
-searchInput.addEventListener("input", () => {
+const debouncedSearch = debounce(() => {
   renderEntries();
   touchActivity();
-});
+}, 150);
+searchInput.addEventListener("input", debouncedSearch);
 tagsInput.addEventListener("input", () => {
   const value = tagsInput.value;
   if (/[、/|;；,\s]/.test(value)) {
@@ -4392,6 +4478,10 @@ window.vault?.onUpdateDownloadProgress?.((progress) => {
     ...progress,
   };
   syncUpdateSettings();
+  if ((progress?.stage === "cancelled" || progress?.stage === "error") && state.updateCancelResolver) {
+    state.updateCancelResolver();
+    state.updateCancelResolver = null;
+  }
 });
 
 window.vault?.onStatus?.((status) => {
@@ -4438,6 +4528,7 @@ window.vault?.onStatus?.((status) => {
 queueMicrotask(() => {
   refreshAppInfo();
   initAuthState();
+  loadUpdateReminderFromFile();
   syncDetailSurface();
 });
 
