@@ -1,96 +1,120 @@
 # Coco Dense
 
-Coco Dense 是一个个人自用的本地密码保险箱桌面应用。当前版本是 Electron 桌面版，支持 macOS 和 Windows，具备本地加密保存、解锁、锁定、新增/编辑/删除条目、收藏、标签、搜索、密码生成、加密文件导入和导出。
+一款本地加密的个人密码管理桌面应用，基于 Electron 构建，支持 macOS 和 Windows。
 
-## 当前能力
+所有密码数据均以 AES-256-GCM 加密存储在本地，主密码通过 PBKDF2 派生密钥，明文不会写入磁盘。
 
-- 本地保险箱文件保存到 Electron 的 `userData/vault.json`。
-- 磁盘只保存 AES-256-GCM 加密后的 vault 数据。
-- 主密码通过 PBKDF2 派生密钥，不会明文写入磁盘。
-- 锁定后返回登录页，并清空前端状态、剪贴板计时器和主进程内存缓存。
-- 支持导出加密 vault 文件，用于 OneDrive、iCloud、WebDAV 或 Syncthing 等工具同步。
-- 支持导入已有加密 vault 文件恢复数据。
-- 支持修改主密码，会用新主密码重新加密本地 vault。
-- macOS 上支持 Touch ID 解锁，需先用主密码解锁一次后在设置里启用。
+---
 
-## 开发运行
+## 功能特性
 
-macOS:
+**密码管理**
+- 新增、编辑、删除密码条目
+- 支持名称、账号、密码、网址、标签、备注、优先级
+- 自定义文件夹分组，支持拖拽归类
+- 密码强度实时检测
+- 一键生成高强度随机密码
+
+**安全机制**
+- AES-256-GCM 加密，PBKDF2 密钥派生
+- 数据钥匙（Data Key）独立加密保护
+- 安全问题找回主密码
+- macOS Touch ID 指纹解锁
+- 剪贴板自动清除
+- 自动锁定
+
+**数据同步**
+- WebDAV 云端同步（支持坚果云等服务）
+- 双向合并冲突处理
+- 加密文件导出 / 导入备份
+
+**界面与交互**
+- 左侧文件夹 + 标签筛选
+- 按标签和优先级分类过滤
+- 拼音首字母模糊搜索
+- 自定义下拉菜单，键盘可操作
+- 解锁后自动检查更新，更新日志卡片提醒
+
+---
+
+## 下载安装
+
+前往 [Releases](https://github.com/is-coco/coco-dense/releases/latest) 页面下载最新版本。
+
+| 平台 | 格式 |
+|------|------|
+| macOS | `.dmg` 安装包 / `.zip` 便携包 |
+| Windows | `.exe` 便携版 |
+
+---
+
+## 技术栈
+
+- **运行时**：Electron
+- **前端**：HTML / CSS / JavaScript
+- **加密**：Node.js crypto（AES-256-GCM / PBKDF2）
+- **拼音检索**：pinyin-pro
+- **打包**：electron-builder
+- **CI/CD**：GitHub Actions（自动构建 Win / Mac 双平台）
+
+---
+
+## 本地开发
+
+**macOS**
 
 ```bash
 npm install
 npm start
 ```
 
-Windows:
+**Windows**
 
 ```powershell
-npm.cmd install --cache .npm-cache
-npm.cmd start
+npm install
+npm start
 ```
 
-## 构建 macOS 版
+---
 
-首次构建前如果需要重新生成 macOS 图标：
+## 构建打包
 
-```bash
-npm run icon:mac
-```
-
-构建 `.dmg` 和 `.zip`：
+**macOS**
 
 ```bash
 npm run dist:mac
 ```
 
-只构建未压缩的 `.app`，适合本机快速测试：
-
-```bash
-npm run dist:mac:dir
-```
-
-常见输出路径：
-
-```text
-dist/mac*/Coco Dense.app
-dist/*.dmg
-dist/*.zip
-```
-
-## 构建 Windows 免安装版
+**Windows 便携版（免安装）**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build-unpacked.ps1
+powershell -ExecutionPolicy Bypass -File build-unpacked.ps1
 ```
 
-稳定输出路径：
+**Windows 单文件**
 
-```text
-C:\Users\coco\Desktop\codex项目\dist\Coco Dense-win32-x64\Coco Dense.exe
+```powershell
+npm run dist:win
 ```
 
-## 发布多端安装包
+---
 
-这个仓库已经配置 GitHub Actions 自动发布流程：
+## 发布流程
 
-- 手动运行 `Release Builds` 工作流：只构建 macOS 和 Windows 安装包，适合测试。
-- 推送版本标签，例如 `v0.2.0`：自动构建 macOS `.dmg/.zip` 和 Windows `.exe`，并上传到同一个 GitHub Release。
-
-发布新版本：
+仓库已配置 GitHub Actions，推送版本标签后自动构建并发布到 Releases。
 
 ```bash
-npm version 0.2.0 --no-git-tag-version
+npm version 0.4.0 --no-git-tag-version
 git add package.json package-lock.json
-git commit -m "Release v0.2.0"
-git tag v0.2.0
+git commit -m "Release v0.4.0"
+git tag v0.4.0
 git push origin master --tags
 ```
 
-发布完成后，在 GitHub 仓库的 `Releases` 页面可以同时下载不同平台的程序。
+构建完成后，GitHub Release 页面会自动附带 macOS 和 Windows 安装包。
 
-## 后续重点
+---
 
-- 处理正式上线前的 macOS 签名和公证。
-- 升级 Electron 与打包工具，清理依赖安全审计风险。
-- 继续完善 Windows 端体验和安装包形式。
-- 规划 Android 端的数据协议和同步实现。
+## 许可证
+
+本项目仅供个人学习与使用，未经授权禁止商业用途。
