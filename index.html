@@ -237,7 +237,7 @@
                     aria-label="搜索密码记录"
                   />
                 </div>
-                <div class="sidebar-filter-row">
+                <div class="sidebar-filter-row legacy-filter-row">
                   <select id="tagFilterSelect" aria-label="按标签筛选">
                     <option value="">全部标签</option>
                   </select>
@@ -248,6 +248,41 @@
                     <option value="blue">蓝色</option>
                     <option value="green">绿色</option>
                   </select>
+                </div>
+
+                <div class="sidebar-filter-row custom-filter-row">
+                  <div class="filter-select" data-filter-select="tag">
+                    <button
+                      class="filter-trigger"
+                      id="tagFilterButton"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                      aria-controls="tagFilterMenu"
+                    >
+                      <span id="tagFilterLabel">全部标签</span>
+                      <svg class="filter-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M4 6.25 8 10l4-3.75" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <div class="filter-menu hidden" id="tagFilterMenu" role="listbox" aria-label="按标签筛选"></div>
+                  </div>
+                  <div class="filter-select" data-filter-select="priority">
+                    <button
+                      class="filter-trigger"
+                      id="priorityFilterButton"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                      aria-controls="priorityFilterMenu"
+                    >
+                      <span id="priorityFilterLabel">全部优先级</span>
+                      <svg class="filter-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M4 6.25 8 10l4-3.75" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <div class="filter-menu hidden" id="priorityFilterMenu" role="listbox" aria-label="按优先级筛选"></div>
+                  </div>
                 </div>
 
                 <div class="chip-row hidden" aria-hidden="true">
@@ -825,6 +860,28 @@
     </div>
 
     <div class="toast hidden" id="toast" role="status" aria-live="polite">已解锁保险箱</div>
+
+    <div class="modal-backdrop hidden" id="updateReminderModal" aria-hidden="true">
+      <section class="modal-sheet update-reminder-sheet" role="dialog" aria-modal="true" aria-labelledby="updateReminderTitle">
+        <div class="update-reminder-hero">
+          <div class="update-reminder-badge">NEW</div>
+          <div>
+            <p class="eyebrow">版本更新</p>
+            <h2 id="updateReminderTitle">发现新版本</h2>
+          </div>
+        </div>
+        <div class="update-reminder-meta">
+          <span class="update-reminder-version" id="updateReminderVersion">v--</span>
+          <span class="update-reminder-name" id="updateReminderName">Coco Dense</span>
+        </div>
+        <p class="update-reminder-copy" id="updateReminderCopy">解锁后已自动检查到新版本，下面是本次更新内容。</p>
+        <div class="update-reminder-notes" id="updateReminderNotes">--</div>
+        <div class="update-reminder-actions">
+          <button class="secondary-btn" type="button" id="dismissUpdateTodayBtn">今日不再提醒</button>
+          <button class="primary-btn" type="button" id="closeUpdateReminderBtn">我知道了</button>
+        </div>
+      </section>
+    </div>
 
     <div class="entry-context-menu hidden" id="entryContextMenu" role="menu" aria-hidden="true">
       <button type="button" role="menuitem" data-menu-action="edit">

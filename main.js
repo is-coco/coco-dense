@@ -1510,6 +1510,18 @@ function bindMacCloseToHide(targetWindow, getPeerWindow) {
   });
 }
 
+function bindDesktopCloseToQuit(targetWindow, getPeerWindow) {
+  targetWindow.on("close", () => {
+    if (isMac || isQuitting) return;
+
+    isQuitting = true;
+    const peerWindow = typeof getPeerWindow === "function" ? getPeerWindow() : null;
+    if (peerWindow && !peerWindow.isDestroyed()) {
+      peerWindow.destroy();
+    }
+  });
+}
+
 function configureApplicationMenu() {
   if (!isMac) {
     Menu.setApplicationMenu(null);
@@ -2324,6 +2336,7 @@ function createLoginWindow() {
     broadcastStatus();
   });
   bindMacCloseToHide(loginWindow, () => vaultWindow);
+  bindDesktopCloseToQuit(loginWindow, () => vaultWindow);
   loginWindow.on("closed", () => {
     loginWindow = null;
   });
@@ -2358,6 +2371,7 @@ function createVaultWindow() {
     });
   });
   bindMacCloseToHide(vaultWindow, () => loginWindow);
+  bindDesktopCloseToQuit(vaultWindow, () => loginWindow);
   vaultWindow.on("closed", () => {
     vaultWindow = null;
   });

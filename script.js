@@ -25,6 +25,12 @@ const tagSuggestions = document.getElementById("tagSuggestions");
 const existingTagOptions = document.getElementById("existingTagOptions");
 const tagFilterSelect = document.getElementById("tagFilterSelect");
 const priorityFilterSelect = document.getElementById("priorityFilterSelect");
+const tagFilterButton = document.getElementById("tagFilterButton");
+const tagFilterLabel = document.getElementById("tagFilterLabel");
+const tagFilterMenu = document.getElementById("tagFilterMenu");
+const priorityFilterButton = document.getElementById("priorityFilterButton");
+const priorityFilterLabel = document.getElementById("priorityFilterLabel");
+const priorityFilterMenu = document.getElementById("priorityFilterMenu");
 const notesInput = document.getElementById("notesInput");
 const editEntryBtn = document.getElementById("editEntryBtn");
 const favoriteEntryBtn = document.getElementById("favoriteEntryBtn");
@@ -138,6 +144,13 @@ const updateProgressFile = document.getElementById("updateProgressFile");
 const checkUpdateBtn = document.getElementById("checkUpdateBtn");
 const downloadUpdateBtn = document.getElementById("downloadUpdateBtn");
 const openReleaseBtn = document.getElementById("openReleaseBtn");
+const updateReminderModal = document.getElementById("updateReminderModal");
+const updateReminderVersion = document.getElementById("updateReminderVersion");
+const updateReminderName = document.getElementById("updateReminderName");
+const updateReminderCopy = document.getElementById("updateReminderCopy");
+const updateReminderNotes = document.getElementById("updateReminderNotes");
+const dismissUpdateTodayBtn = document.getElementById("dismissUpdateTodayBtn");
+const closeUpdateReminderBtn = document.getElementById("closeUpdateReminderBtn");
 const openRecoverySettingsBtn = document.getElementById("openRecoverySettingsBtn");
 const recoverySettingsModal = document.getElementById("recoverySettingsModal");
 const recoverySettingsForm = document.getElementById("recoverySettingsForm");
@@ -173,6 +186,13 @@ const PRIORITY_ORDER = {
   blue: 2,
   green: 1,
 };
+
+const FILTER_DEFAULT_LABELS = {
+  tag: "全部标签",
+  priority: "全部优先级",
+};
+
+const UPDATE_REMINDER_STORAGE_KEY = "coco-dense-update-reminder";
 
 const SECRET_MASK = "●●●●●●●●";
 
@@ -249,6 +269,7 @@ const state = {
   activeFilter: "全部",
   activeTagFilter: "",
   activePriorityFilter: "",
+  activeFilterMenu: "",
   activePriority: "green",
   tagInputFocused: false,
   contextEntryId: "",
@@ -293,6 +314,9 @@ const state = {
   },
   updateInfo: null,
   updateDownloadProgress: null,
+  updateReminder: loadUpdateReminderState(),
+  updateReminderShownVersion: "",
+  updateAutoChecked: false,
 };
 
 function normalizePriority(priority) {
@@ -373,6 +397,9 @@ function syncSidebarFilters() {
     priorityFilterSelect.value = state.activePriorityFilter;
   }
 
+  syncCustomFilterMenu("tag");
+  syncCustomFilterMenu("priority");
+
   if (existingTagOptions) {
     existingTagOptions.innerHTML = "";
     tags.forEach((tag) => {
@@ -381,6 +408,123 @@ function syncSidebarFilters() {
       existingTagOptions.appendChild(option);
     });
   }
+}
+
+function getFilterElements(type) {
+  if (type === "tag") {
+    return {
+      root: tagFilterButton?.closest(".filter-select"),
+      select: tagFilterSelect,
+      button: tagFilterButton,
+      label: tagFilterLabel,
+      menu: tagFilterMenu,
+      defaultLabel: FILTER_DEFAULT_LABELS.tag,
+    };
+  }
+  if (type === "priority") {
+    return {
+      root: priorityFilterButton?.closest(".filter-select"),
+      select: priorityFilterSelect,
+      button: priorityFilterButton,
+      label: priorityFilterLabel,
+      menu: priorityFilterMenu,
+      defaultLabel: FILTER_DEFAULT_LABELS.priority,
+    };
+  }
+  return null;
+}
+
+function closeFilterMenu(type, { restoreFocus = false } = {}) {
+  const elements = getFilterElements(type);
+  if (!elements?.button || !elements?.menu || !elements?.root) return;
+  elements.root.classList.remove("is-open");
+  elements.button.setAttribute("aria-expanded", "false");
+  elements.menu.classList.add("hidden");
+  if (state.activeFilterMenu === type) {
+    state.activeFilterMenu = "";
+  }
+  if (restoreFocus) {
+    elements.button.focus({ preventScroll: true });
+  }
+}
+
+function closeAllFilterMenus(options = {}) {
+  closeFilterMenu("tag", options);
+  closeFilterMenu("priority", options);
+}
+
+function focusFilterOption(type, direction = 1) {
+  const elements = getFilterElements(type);
+  const options = Array.from(elements?.menu?.querySelectorAll(".filter-option") || []);
+  if (!options.length) return;
+  const currentIndex = options.findIndex((option) => option === document.activeElement);
+  const selectedIndex = options.findIndex((option) => option.classList.contains("is-active"));
+  const baseIndex = currentIndex >= 0 ? currentIndex : selectedIndex >= 0 ? selectedIndex : 0;
+  const nextIndex = (baseIndex + direction + options.length) % options.length;
+  options[nextIndex]?.focus({ preventScroll: true });
+}
+
+function openFilterMenu(type, { focusSelected = false } = {}) {
+  const elements = getFilterElements(type);
+  if (!elements?.button || !elements?.menu || !elements?.root) return;
+  if (state.activeFilterMenu && state.activeFilterMenu !== type) {
+    closeFilterMenu(state.activeFilterMenu);
+  }
+  state.activeFilterMenu = type;
+  elements.root.classList.add("is-open");
+  elements.button.setAttribute("aria-expanded", "true");
+  elements.menu.classList.remove("hidden");
+  if (focusSelected) {
+    const target = elements.menu.querySelector(".filter-option.is-active") || elements.menu.querySelector(".filter-option");
+    target?.focus({ preventScroll: true });
+  }
+}
+
+function toggleFilterMenu(type, options = {}) {
+  if (state.activeFilterMenu === type) {
+    closeFilterMenu(type, options);
+    return;
+  }
+  openFilterMenu(type, options);
+}
+
+function syncCustomFilterMenu(type) {
+  const elements = getFilterElements(type);
+  if (!elements?.select || !elements?.menu || !elements?.label) return;
+
+  const options = Array.from(elements.select.options).map((option) => ({
+    value: option.value,
+    label: option.textContent || elements.defaultLabel,
+  }));
+  const selectedValue = elements.select.value;
+  const selectedOption = options.find((option) => option.value === selectedValue);
+  elements.label.textContent = selectedOption?.label || elements.defaultLabel;
+  elements.menu.innerHTML = "";
+
+  options.forEach((option) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "filter-option";
+    button.dataset.filterType = type;
+    button.dataset.filterValue = option.value;
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", String(option.value === selectedValue));
+    if (option.value === selectedValue) {
+      button.classList.add("is-active");
+    }
+
+    const marker = document.createElement("span");
+    marker.className = "filter-option-mark";
+    if (type === "priority" && option.value) {
+      marker.classList.add(option.value);
+    }
+    button.appendChild(marker);
+
+    const text = document.createElement("span");
+    text.textContent = option.label;
+    button.appendChild(text);
+    elements.menu.appendChild(button);
+  });
 }
 
 function renderTagSuggestions() {
@@ -1301,6 +1445,9 @@ async function checkForAppUpdates() {
       return false;
     }
     state.updateInfo = result;
+    if (result.updateAvailable && !shouldMuteUpdateReminder(result)) {
+      showUpdateReminder(result);
+    }
     showToast(result.updateAvailable ? `发现新版本 v${result.latestVersion}` : "当前已经是最新版本");
     syncUpdateSettings();
     return result.updateAvailable;
@@ -1357,6 +1504,12 @@ async function openReleasePage() {
   const targetUrl = state.updateInfo?.releaseUrl || "https://github.com/is-coco/coco-dense/releases";
   const result = await window.vault?.openExternal?.(targetUrl);
   showToast(result?.ok ? "已打开发布页" : result?.error || "无法打开发布页");
+}
+
+async function autoCheckForAppUpdatesAfterUnlock() {
+  if (!state.unlocked || state.updateChecking || state.updateDownloading || state.updateAutoChecked) return;
+  state.updateAutoChecked = true;
+  await checkForAppUpdates();
 }
 
 function getCloudSyncIntervalMs() {
@@ -1925,6 +2078,84 @@ function loadFolderUiState() {
   } catch {
     return {};
   }
+}
+
+function loadUpdateReminderState() {
+  try {
+    const raw = window.localStorage?.getItem(UPDATE_REMINDER_STORAGE_KEY) || "";
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object") return { mutedDate: "", mutedVersion: "" };
+    return {
+      mutedDate: String(parsed.mutedDate || ""),
+      mutedVersion: String(parsed.mutedVersion || ""),
+    };
+  } catch {
+    return { mutedDate: "", mutedVersion: "" };
+  }
+}
+
+function saveUpdateReminderState() {
+  try {
+    window.localStorage?.setItem(UPDATE_REMINDER_STORAGE_KEY, JSON.stringify(state.updateReminder || {}));
+  } catch {
+    // ignore local persistence errors
+  }
+}
+
+function getTodayReminderKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function closeUpdateReminder() {
+  updateReminderModal?.classList.add("hidden");
+  updateReminderModal?.setAttribute("aria-hidden", "true");
+}
+
+function shouldMuteUpdateReminder(updateInfo) {
+  if (!updateInfo?.updateAvailable || !updateInfo?.latestVersion) return true;
+  const reminder = state.updateReminder || {};
+  return (
+    reminder.mutedDate === getTodayReminderKey() &&
+    reminder.mutedVersion === String(updateInfo.latestVersion || "")
+  );
+}
+
+function showUpdateReminder(updateInfo) {
+  if (!updateReminderModal || !updateInfo?.updateAvailable) return;
+  const latestVersion = String(updateInfo.latestVersion || "").trim();
+  const notes = String(updateInfo.notes || "").trim();
+  if (updateReminderVersion) {
+    updateReminderVersion.textContent = latestVersion ? `v${latestVersion}` : "v--";
+  }
+  if (updateReminderName) {
+    updateReminderName.textContent = updateInfo.releaseName || "Coco Dense";
+  }
+  if (updateReminderCopy) {
+    updateReminderCopy.textContent = updateInfo.assetName
+      ? `解锁后已自动检查到新版本，可在设置页直接下载安装包。本次版本：${updateInfo.assetName}`
+      : "解锁后已自动检查到新版本，下面是本次更新内容。";
+  }
+  if (updateReminderNotes) {
+    updateReminderNotes.textContent = notes || "本次版本暂未填写更新日志。";
+  }
+  updateReminderModal.classList.remove("hidden");
+  updateReminderModal.setAttribute("aria-hidden", "false");
+  state.updateReminderShownVersion = latestVersion;
+}
+
+function dismissUpdateReminderToday() {
+  const latestVersion = String(state.updateInfo?.latestVersion || state.updateReminderShownVersion || "").trim();
+  state.updateReminder = {
+    mutedDate: getTodayReminderKey(),
+    mutedVersion: latestVersion,
+  };
+  saveUpdateReminderState();
+  closeUpdateReminder();
+  showToast("今天不再提醒这个版本");
 }
 
 function saveFolderUiState() {
@@ -3632,6 +3863,20 @@ openReleaseBtn?.addEventListener("click", () => {
   openReleasePage();
 });
 
+dismissUpdateTodayBtn?.addEventListener("click", () => {
+  dismissUpdateReminderToday();
+});
+
+closeUpdateReminderBtn?.addEventListener("click", () => {
+  closeUpdateReminder();
+});
+
+updateReminderModal?.addEventListener("click", (event) => {
+  if (event.target === updateReminderModal) {
+    closeUpdateReminder();
+  }
+});
+
 deleteEntryBtn.addEventListener("click", () => {
   if (!state.activeId) return showToast("当前没有可删除的记录");
   const entry = getActiveEntry();
@@ -3790,14 +4035,92 @@ document.querySelectorAll(".chip").forEach((chip) => {
 
 tagFilterSelect?.addEventListener("change", () => {
   state.activeTagFilter = tagFilterSelect.value;
+  closeFilterMenu("tag");
   renderEntries();
   touchActivity();
 });
 
 priorityFilterSelect?.addEventListener("change", () => {
   state.activePriorityFilter = priorityFilterSelect.value;
+  closeFilterMenu("priority");
   renderEntries();
   touchActivity();
+});
+
+tagFilterButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleFilterMenu("tag");
+  touchActivity();
+});
+
+priorityFilterButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleFilterMenu("priority");
+  touchActivity();
+});
+
+tagFilterButton?.addEventListener("keydown", (event) => {
+  if (!["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) return;
+  event.preventDefault();
+  openFilterMenu("tag", { focusSelected: true });
+  if (event.key === "ArrowUp") {
+    focusFilterOption("tag", -1);
+  }
+});
+
+priorityFilterButton?.addEventListener("keydown", (event) => {
+  if (!["ArrowDown", "ArrowUp", "Enter", " "].includes(event.key)) return;
+  event.preventDefault();
+  openFilterMenu("priority", { focusSelected: true });
+  if (event.key === "ArrowUp") {
+    focusFilterOption("priority", -1);
+  }
+});
+
+tagFilterMenu?.addEventListener("click", (event) => {
+  const button = event.target.closest(".filter-option");
+  if (!button || !tagFilterSelect) return;
+  tagFilterSelect.value = button.dataset.filterValue || "";
+  tagFilterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+priorityFilterMenu?.addEventListener("click", (event) => {
+  const button = event.target.closest(".filter-option");
+  if (!button || !priorityFilterSelect) return;
+  priorityFilterSelect.value = button.dataset.filterValue || "";
+  priorityFilterSelect.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+tagFilterMenu?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeFilterMenu("tag", { restoreFocus: true });
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    focusFilterOption("tag", 1);
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    focusFilterOption("tag", -1);
+  }
+});
+
+priorityFilterMenu?.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeFilterMenu("priority", { restoreFocus: true });
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    focusFilterOption("priority", 1);
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    focusFilterOption("priority", -1);
+  }
 });
 
 topSyncStatus?.addEventListener("click", () => {
@@ -3936,12 +4259,16 @@ window.addEventListener("scroll", touchActivity, { passive: true });
 window.addEventListener("keydown", (event) => {
   touchActivity();
   if (event.key === "Escape") {
+    closeUpdateReminder();
+    closeAllFilterMenus();
     hideEntryContextMenu();
     hideFolderContextMenu();
     hideSidebarContextMenu();
   }
 });
 window.addEventListener("click", (event) => {
+  if (event.target.closest(".filter-select")) return;
+  closeAllFilterMenus();
   if (entryContextMenu?.contains(event.target)) return;
   if (folderContextMenu?.contains(event.target)) return;
   if (sidebarContextMenu?.contains(event.target)) return;
@@ -3970,6 +4297,9 @@ function showMainVault(payload) {
   }
   syncPrimaryActionButton();
   syncDetailSurface();
+  queueMicrotask(() => {
+    autoCheckForAppUpdatesAfterUnlock();
+  });
 }
 
 window.vault?.onShowVault?.(showMainVault);
@@ -3991,9 +4321,11 @@ window.vault?.onVaultUpdated?.((payload) => {
 window.vault?.onClearAuth?.(() => {
   clearCloudSyncTimer();
   closeChangePasswordModal();
+  closeUpdateReminder();
   clearSensitiveInputs();
   refreshRecoveryStatus();
   refreshDataKeyStatus();
+  state.updateAutoChecked = false;
 });
 
 window.vault?.onUpdateDownloadProgress?.((progress) => {
