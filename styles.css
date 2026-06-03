@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: light;
   --page: #eef1f5;
   --window: rgba(255, 255, 255, 0.86);
@@ -476,7 +476,7 @@ textarea::placeholder {
   left: 20px;
 }
 
-/* macOS 使用系统原生红黄绿窗口按钮，隐藏页面自绘按钮以避免重叠。 */
+/* macOS 浣跨敤绯荤粺鍘熺敓绾㈤粍缁跨獥鍙ｆ寜閽紝闅愯棌椤甸潰鑷粯鎸夐挳浠ラ伩鍏嶉噸鍙犮€?*/
 .native-window-controls .traffic-lights {
   display: none;
 }
@@ -647,6 +647,23 @@ textarea::placeholder {
   overflow: auto;
   padding: 12px 14px 16px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 253, 0.92));
+}
+
+.content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(60, 60, 67, 0.12);
+}
+
+.content::-webkit-scrollbar-thumb:hover {
+  background: rgba(60, 60, 67, 0.22);
 }
 
 .content.empty-detail-mode {
@@ -1688,6 +1705,27 @@ textarea::placeholder {
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 60, 67, 0.15) transparent;
+}
+
+.update-notes-body::-webkit-scrollbar {
+  width: 5px;
+}
+
+.update-notes-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.update-notes-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(60, 60, 67, 0.15);
+}
+
+.update-notes-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(60, 60, 67, 0.25);
 }
 
 .update-progress {
@@ -2735,22 +2773,26 @@ textarea::placeholder {
   padding: 0 20px;
 }
 
-.update-reminder-version {
+.update-reminder-pill {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  color: #0b5fd6;
-  background: rgba(0, 122, 255, 0.1);
+  color: #5f6b7a;
+  background: rgba(244, 247, 252, 0.9);
   font-size: 12px;
   font-weight: 700;
 }
 
-.update-reminder-name {
-  color: #5f6b7a;
-  font-size: 12px;
-  font-weight: 600;
+.update-reminder-pill-new {
+  color: #0b5fd6;
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.update-reminder-arrow {
+  color: #9ca3af;
+  font-size: 14px;
 }
 
 .update-reminder-copy {
@@ -2763,6 +2805,8 @@ textarea::placeholder {
 
 .update-reminder-notes {
   margin: 14px 16px 0;
+  max-height: 220px;
+  min-height: 100px;
   padding: 14px 14px 15px;
   border: 1px solid rgba(60, 60, 67, 0.08);
   border-radius: 18px;
@@ -2773,6 +2817,25 @@ textarea::placeholder {
   line-height: 1.68;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.update-reminder-notes::-webkit-scrollbar {
+  width: 6px;
+}
+
+.update-reminder-notes::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.update-reminder-notes::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(60, 60, 67, 0.18);
+}
+
+.update-reminder-notes::-webkit-scrollbar-thumb:hover {
+  background: rgba(60, 60, 67, 0.3);
 }
 
 .update-reminder-actions {
@@ -2972,3 +3035,6 @@ textarea::placeholder {
     font-size: 13px;
   }
 }
+
+
+

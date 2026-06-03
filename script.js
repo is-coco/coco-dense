@@ -2127,17 +2127,17 @@ function shouldMuteUpdateReminder(updateInfo) {
 function showUpdateReminder(updateInfo) {
   if (!updateReminderModal || !updateInfo?.updateAvailable) return;
   const latestVersion = String(updateInfo.latestVersion || "").trim();
+  const currentVersion = String(state.appInfo?.version || "").trim();
   const notes = String(updateInfo.notes || "").trim();
-  if (updateReminderVersion) {
-    updateReminderVersion.textContent = latestVersion ? `v${latestVersion}` : "v--";
+  const currentEl = document.getElementById("updateReminderCurrent");
+  if (currentEl) {
+    currentEl.textContent = currentVersion ? `当前：v${currentVersion}` : "当前：--";
   }
-  if (updateReminderName) {
-    updateReminderName.textContent = updateInfo.releaseName || "Coco Dense";
+  if (updateReminderVersion) {
+    updateReminderVersion.textContent = latestVersion ? `新版：v${latestVersion}` : "新版：--";
   }
   if (updateReminderCopy) {
-    updateReminderCopy.textContent = updateInfo.assetName
-      ? `解锁后已自动检查到新版本，可在设置页直接下载安装包。本次版本：${updateInfo.assetName}`
-      : "解锁后已自动检查到新版本，下面是本次更新内容。";
+    updateReminderCopy.textContent = updateInfo.assetName ? `安装包：${updateInfo.assetName}` : "以下是本次更新内容。";
   }
   if (updateReminderNotes) {
     updateReminderNotes.textContent = notes || "本次版本暂未填写更新日志。";
@@ -4382,3 +4382,4 @@ queueMicrotask(() => {
   initAuthState();
   syncDetailSurface();
 });
+
