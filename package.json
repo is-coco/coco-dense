@@ -1,6 +1,6 @@
 {
   "name": "coco-dense",
-  "version": "0.4.0",
+  "version": "0.4.5",
   "private": true,
   "main": "main.js",
   "scripts": {
@@ -8,14 +8,15 @@
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac dmg zip",
     "dist:mac:dir": "electron-builder --mac dir",
-    "dist:win": "electron-builder --win portable",
+    "dist:win": "electron-builder --win nsis",
     "dist:local": "powershell -ExecutionPolicy Bypass -File build-local.ps1",
     "dist:unpacked": "powershell -ExecutionPolicy Bypass -File build-unpacked.ps1",
     "icon:mac": "bash scripts/make-mac-icon.sh"
   },
   "devDependencies": {
     "electron": "^34.1.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "rcedit": "^5.0.2"
   },
   "dependencies": {
     "pinyin-pro": "^3.28.1"
@@ -38,10 +39,10 @@
     },
     "win": {
       "icon": "assets/app-icon.ico",
-      "signAndEditExecutable": false,
       "target": [
-        "portable"
-      ]
+        "nsis"
+      ],
+      "artifactName": "${productName}-${version}-Setup.${ext}"
     },
     "mac": {
       "icon": "assets/app-icon.icns",
@@ -55,9 +56,22 @@
     "dmg": {
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "assets/app-icon.ico",
+      "uninstallerIcon": "assets/app-icon.ico",
+      "installerHeaderIcon": "assets/app-icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Coco Dense",
+      "include": "installer.nsh",
+      "artifactName": "${productName}-${version}-Setup.${ext}"
+    },
     "directories": {
       "output": "dist"
     }
   }
 }
-

@@ -1056,7 +1056,7 @@ textarea::placeholder {
 
 .filter-option-mark {
   width: 7px;
-  height: 7px;
+  height: 5px;
   flex: 0 0 auto;
   border-radius: 999px;
   background: rgba(133, 144, 159, 0.45);
@@ -1629,20 +1629,38 @@ textarea::placeholder {
 
 .update-setting {
   grid-column: 1 / -1;
-  gap: 10px;
+  gap: 6px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(60, 60, 67, 0.12) transparent;
+}
+
+.update-setting::-webkit-scrollbar {
+  width: 5px;
+}
+.update-setting::-webkit-scrollbar-track {
+  background: transparent;
+}
+.update-setting::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(60, 60, 67, 0.12);
+}
+.update-setting::-webkit-scrollbar-thumb:hover {
+  background: rgba(60, 60, 67, 0.22);
 }
 
 .update-version-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .update-version-grid > div {
   display: grid;
-  gap: 4px;
-  min-height: 54px;
-  padding: 10px 11px;
+  gap: 1px;
+  min-height: 34px;
+  padding: 5px 8px;
   border: 1px solid rgba(60, 60, 67, 0.09);
   border-radius: 12px;
   background: rgba(248, 250, 252, 0.78);
@@ -1656,21 +1674,21 @@ textarea::placeholder {
 
 .update-version-grid strong {
   color: var(--text);
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 760;
 }
 
 .update-asset-text {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .update-notes {
   display: grid;
-  gap: 8px;
-  padding: 10px 11px;
+  gap: 4px;
+  padding: 8px 10px;
   border: 1px solid rgba(60, 60, 67, 0.09);
   border-radius: 12px;
   background: rgba(248, 250, 252, 0.82);
@@ -1684,12 +1702,12 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .update-notes-head span {
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1705,7 +1723,7 @@ textarea::placeholder {
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 200px;
+  max-height: 120px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(60, 60, 67, 0.15) transparent;
@@ -1730,8 +1748,8 @@ textarea::placeholder {
 
 .update-progress {
   display: grid;
-  gap: 7px;
-  padding: 10px 11px;
+  gap: 4px;
+  padding: 6px 8px;
   border: 1px solid rgba(0, 122, 255, 0.12);
   border-radius: 12px;
   background: rgba(0, 122, 255, 0.04);
@@ -1750,7 +1768,7 @@ textarea::placeholder {
 
 .update-progress-head span {
   color: var(--text);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 760;
   font-variant-numeric: tabular-nums;
 }

@@ -143,6 +143,7 @@ const updateProgressBar = document.getElementById("updateProgressBar");
 const updateProgressFile = document.getElementById("updateProgressFile");
 const checkUpdateBtn = document.getElementById("checkUpdateBtn");
 const downloadUpdateBtn = document.getElementById("downloadUpdateBtn");
+const cancelUpdateBtn = document.getElementById("cancelUpdateBtn");
 const openReleaseBtn = document.getElementById("openReleaseBtn");
 const updateReminderModal = document.getElementById("updateReminderModal");
 const updateReminderVersion = document.getElementById("updateReminderVersion");
@@ -314,6 +315,7 @@ const state = {
   },
   updateInfo: null,
   updateDownloadProgress: null,
+  downloadedFilePath: "",
   updateReminder: loadUpdateReminderState(),
   updateReminderShownVersion: "",
   updateAutoChecked: false,
@@ -1359,7 +1361,7 @@ function syncUpdateDownloadProgress() {
   if (updateProgressTrack) updateProgressTrack.setAttribute("aria-valuenow", String(percent));
   if (updateProgressBar) updateProgressBar.style.width = hasTotal || progress.stage === "done" ? `${percent}%` : "42%";
   if (updateProgressPercent) updateProgressPercent.textContent = hasTotal || progress.stage === "done" ? `${percent}%` : "--";
-  if (updateProgressMeta) updateProgressMeta.textContent = speed ? `${sizeText} · ${speed}` : sizeText;
+  if (updateProgressMeta) { const src = progress.source ? ` · ${progress.source}` : ""; updateProgressMeta.textContent = speed ? `${sizeText} · ${speed}${src}` : `${sizeText}${src}`; }
   if (updateProgressFile) updateProgressFile.textContent = progress.filePath || state.updateInfo?.assetName || "--";
   if (updateStatusText && state.updateDownloading) {
     updateStatusText.textContent = getUpdateProgressLabel(progress.stage);
@@ -1474,6 +1476,13 @@ async function downloadAppUpdate() {
   if (downloadUpdateBtn) {
     downloadUpdateBtn.disabled = true;
     downloadUpdateBtn.textContent = "下载中";
+    delete downloadUpdateBtn.dataset.installMode;
+  }
+  state.downloadedFilePath = "";
+  if (cancelUpdateBtn) {
+    cancelUpdateBtn.classList.remove("hidden");
+    cancelUpdateBtn.disabled = false;
+    cancelUpdateBtn.textContent = "取消下载";
   }
   if (updateStatusText) updateStatusText.textContent = "正在下载安装包，完成后会自动打开。";
   syncUpdateSettings();
@@ -1487,14 +1496,33 @@ async function downloadAppUpdate() {
       return;
     }
     state.updateInfo = result;
-    const message = result.opened ? "安装包已下载并打开" : "安装包已下载，请在下载目录中打开";
-    showToast(message);
-    if (updateStatusText) updateStatusText.textContent = `${message}：${result.filePath || ""}`;
+    state.downloadedFilePath = result.filePath || "";
+    const installNow = window.confirm(`下载完成，是否立即安装？
+
+点击确定立即安装，点击取消稍后手动安装。`);
+    if (installNow) {
+      await window.vault?.installDownloaded?.(state.downloadedFilePath);
+      if (updateStatusText) updateStatusText.textContent = "正在打开安装包...";
+    } else {
+      if (downloadUpdateBtn) {
+        downloadUpdateBtn.disabled = false;
+        downloadUpdateBtn.textContent = "安装更新";
+        downloadUpdateBtn.dataset.installMode = "true";
+      }
+      if (updateStatusText) updateStatusText.textContent = `安装包已下载：${result.filePath || ""}`;
+      showToast('安装包已下载，点击"安装更新"即可安装');
+    }
     syncUpdateSettings();
   } finally {
     state.updateDownloading = false;
-    if (downloadUpdateBtn) {
+    if (downloadUpdateBtn && downloadUpdateBtn.dataset?.installMode !== "true") {
       downloadUpdateBtn.textContent = "下载并打开";
+      downloadUpdateBtn.disabled = false;
+    }
+    if (cancelUpdateBtn) {
+      cancelUpdateBtn.classList.add("hidden");
+      cancelUpdateBtn.textContent = "取消下载";
+      cancelUpdateBtn.disabled = false;
     }
     syncUpdateSettings();
   }
@@ -3855,8 +3883,38 @@ checkUpdateBtn?.addEventListener("click", () => {
   checkForAppUpdates();
 });
 
-downloadUpdateBtn?.addEventListener("click", () => {
+downloadUpdateBtn?.addEventListener("click", async () => {
+  if (downloadUpdateBtn?.dataset?.installMode === "true" && state.downloadedFilePath) {
+    await window.vault?.installDownloaded?.(state.downloadedFilePath);
+    if (updateStatusText) updateStatusText.textContent = "正在打开安装包...";
+    return;
+  }
   downloadAppUpdate();
+});
+
+cancelUpdateBtn?.addEventListener("click", async () => {
+  if (!state.updateDownloading) return;
+  cancelUpdateBtn.disabled = true;
+  cancelUpdateBtn.textContent = "取消中...";
+  if (updateProgressBar) updateProgressBar.style.width = "0%";
+  if (updateProgressPercent) updateProgressPercent.textContent = "0%";
+  if (updateProgressMeta) updateProgressMeta.textContent = "已取消";
+  await window.vault?.cancelUpdateDownload?.();
+  await new Promise((r) => setTimeout(r, 3000));
+  state.updateDownloading = false;
+  state.updateDownloadProgress = null;
+  if (downloadUpdateBtn) {
+    downloadUpdateBtn.disabled = false;
+    downloadUpdateBtn.textContent = "下载并打开";
+  }
+  if (cancelUpdateBtn) {
+    cancelUpdateBtn.classList.add("hidden");
+    cancelUpdateBtn.textContent = "取消下载";
+    cancelUpdateBtn.disabled = false;
+  }
+  if (updateProgressPanel) updateProgressPanel.classList.add("hidden");
+  if (updateStatusText) updateStatusText.textContent = "下载已取消";
+  syncUpdateSettings();
 });
 
 openReleaseBtn?.addEventListener("click", () => {

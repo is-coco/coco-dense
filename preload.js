@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("vault", {
   getAppInfo: () => ipcRenderer.invoke("app:getInfo"),
   checkForUpdates: () => ipcRenderer.invoke("update:check"),
   downloadUpdate: () => ipcRenderer.invoke("update:download"),
+  cancelUpdateDownload: () => ipcRenderer.invoke("update:cancelDownload"),
+  installDownloaded: (filePath) => ipcRenderer.invoke("update:installDownloaded", filePath),
   getRecoveryStatus: () => ipcRenderer.invoke("vault:getRecoveryStatus"),
   getBiometricStatus: () => ipcRenderer.invoke("vault:getBiometricStatus"),
   getDataKeyStatus: () => ipcRenderer.invoke("vault:getDataKeyStatus"),

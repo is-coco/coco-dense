@@ -28,7 +28,14 @@ const VAULT_FORMAT_V3 = "coco-dense-envelope-v3";
 const REMOTE_WRITE_VERIFY_ATTEMPTS = 6;
 const REMOTE_WRITE_VERIFY_DELAY_MS = 700;
 const GITHUB_LATEST_RELEASE_URL = "https://api.github.com/repos/is-coco/coco-dense/releases/latest";
+const GITHUB_DOWNLOAD_MIRRORS = [
+  "https://ghfast.top/",
+  "https://ghproxy.cn/",
+];
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+let currentDownloadController = null;
+let currentDownloadFilePath = null;
+let downloadCancelledByUser = false;
 
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -1217,7 +1224,13 @@ function selectReleaseAsset(release) {
     );
   }
   if (platform === "win32") {
-    return assets.find((asset) => /\.exe$/i.test(asset?.name || ""));
+    const exeAssets = assets.filter((asset) => /\.exe$/i.test(asset?.name || ""));
+    return (
+      exeAssets.find((asset) => /[-_]Setup\.exe$/i.test(asset.name || "")) ||
+      exeAssets.find((asset) => /[-_]installer\.exe$/i.test(asset.name || "")) ||
+      exeAssets[0] ||
+      null
+    );
   }
   return null;
 }
@@ -1264,48 +1277,138 @@ function safeDownloadName(name) {
 async function downloadReleaseAsset(assetUrl, assetName, assetSize = 0, onProgress = () => {}) {
   const parsed = new URL(String(assetUrl || ""));
   if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
-    return { ok: false, error: "更新下载地址无效" };
+    return { ok: false, error: "更新地址无效" };
   }
-  onProgress({ stage: "connecting", downloadedBytes: 0, totalBytes: Number(assetSize) || 0 });
-  const response = await fetch(parsed.href, {
-    headers: {
-      "User-Agent": "Coco-Dense-Updater",
-    },
-  });
-  if (!response.ok || !response.body) {
-    return { ok: false, error: `下载更新失败：${response.status}` };
-  }
+
   const filePath = path.join(app.getPath("downloads"), safeDownloadName(assetName));
-  const totalBytes = Number(response.headers.get("content-length")) || Number(assetSize) || 0;
-  let downloadedBytes = 0;
-  let lastProgressAt = 0;
-  const startedAt = Date.now();
-  const progressStream = new Transform({
-    transform(chunk, _encoding, callback) {
-      downloadedBytes += chunk.length;
-      const now = Date.now();
-      if (now - lastProgressAt > 120 || (totalBytes && downloadedBytes >= totalBytes)) {
-        lastProgressAt = now;
-        onProgress({
-          stage: "downloading",
-          downloadedBytes,
-          totalBytes,
-          elapsedMs: now - startedAt,
+  const totalBytes = Number(assetSize) || 0;
+  const downloadUrls = [parsed.href];
+  for (const mirror of GITHUB_DOWNLOAD_MIRRORS) {
+    downloadUrls.push(mirror + parsed.href);
+  }
+
+  let lastError = null;
+  downloadCancelledByUser = false;
+  currentDownloadFilePath = filePath;
+  for (let attempt = 0; attempt < downloadUrls.length; attempt++) {
+    const url = downloadUrls[attempt];
+    const isMirror = attempt > 0;
+    try {
+      onProgress({
+        stage: "connecting",
+        downloadedBytes: 0,
+        totalBytes,
+        source: isMirror ? "镜像加速" : "GitHub 直连",
+      });
+
+      const controller = new AbortController();
+      currentDownloadController = controller;
+      const timeoutMs = isMirror ? 120000 : 20000;
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+      let response;
+      try {
+        response = await fetch(url, {
+          headers: { "User-Agent": "Coco-Dense-Updater" },
+          signal: controller.signal,
+          redirect: "follow",
         });
+      } catch (fetchErr) {
+        clearTimeout(timeout);
+        if (fetchErr?.name === "AbortError") {
+          if (downloadCancelledByUser) {
+            currentDownloadController = null;
+            currentDownloadFilePath = null;
+            return { ok: false, error: "下载已取消", cancelled: true };
+          }
+          lastError = new Error(isMirror ? "镜像下载超时" : "直连超时，尝试镜像加速");
+          continue;
+        }
+        throw fetchErr;
       }
-      callback(null, chunk);
-    },
-  });
-  await pipeline(Readable.fromWeb(response.body), progressStream, fs.createWriteStream(filePath));
-  onProgress({
-    stage: "downloaded",
-    downloadedBytes,
-    totalBytes,
-    elapsedMs: Date.now() - startedAt,
-    filePath,
-  });
-  return { ok: true, filePath };
+      clearTimeout(timeout);
+
+      if (!response.ok || !response.body) {
+        lastError = new Error(`下载失败: ${response.status}`);
+        if (!isMirror) continue;
+        return { ok: false, error: lastError.message };
+      }
+
+      let downloadedBytes = 0;
+      let lastProgressAt = 0;
+      const startedAt = Date.now();
+      let abortedBySpeed = false;
+
+      const progressStream = new Transform({
+        transform(chunk, _encoding, callback) {
+          downloadedBytes += chunk.length;
+          const now = Date.now();
+          if (now - lastProgressAt > 120 || (totalBytes && downloadedBytes >= totalBytes)) {
+            lastProgressAt = now;
+            const elapsed = now - startedAt;
+            const speed = elapsed > 0 ? (downloadedBytes / elapsed) * 1000 : 0;
+            if (!isMirror && attempt === 0 && elapsed > 10000 && speed < 50000) {
+              abortedBySpeed = true;
+              controller.abort();
+              callback(new Error("SPEED_TOO_SLOW"));
+              return;
+            }
+            onProgress({
+              stage: "downloading",
+              downloadedBytes,
+              totalBytes,
+              elapsedMs: elapsed,
+              source: isMirror ? "镜像加速" : "GitHub 直连",
+            });
+          }
+          callback(null, chunk);
+        },
+      });
+
+      try {
+        await pipeline(Readable.fromWeb(response.body), progressStream, fs.createWriteStream(filePath));
+      } catch (pipeErr) {
+        if (downloadCancelledByUser) {
+          currentDownloadController = null;
+          currentDownloadFilePath = null;
+          return { ok: false, error: "下载已取消", cancelled: true };
+        }
+        if (pipeErr?.message === "SPEED_TOO_SLOW" || abortedBySpeed) {
+          lastError = new Error("直连速度过慢，正在切换镜像加速");
+          continue;
+        }
+        throw pipeErr;
+      }
+
+      onProgress({
+        stage: "downloaded",
+        downloadedBytes,
+        totalBytes: downloadedBytes,
+        elapsedMs: Date.now() - startedAt,
+        filePath,
+        source: isMirror ? "镜像加速" : "GitHub 直连",
+      });
+      currentDownloadController = null;
+      currentDownloadFilePath = null;
+      return { ok: true, filePath, source: isMirror ? "mirror" : "direct" };
+    } catch (err) {
+      if (downloadCancelledByUser) {
+        currentDownloadController = null;
+        currentDownloadFilePath = null;
+        return { ok: false, error: "下载已取消", cancelled: true };
+      }
+      lastError = err;
+      if (!isMirror) continue;
+      currentDownloadController = null;
+      currentDownloadFilePath = null;
+      return { ok: false, error: err?.message || "下载失败" };
+    }
+  }
+  currentDownloadController = null;
+  currentDownloadFilePath = null;
+  return { ok: false, error: lastError?.message || "下载失败" };
 }
+
 
 function resetUnlockFailures() {
   unlockFailures = 0;
@@ -1688,6 +1791,47 @@ function wireWindowControls() {
       return { ok: false, error: error?.message || "检查更新失败" };
     }
   });
+  ipcMain.handle("update:installDownloaded", async (_event, filePath) => {
+    try {
+      if (!filePath || !fs.existsSync(filePath)) {
+        return { ok: false, error: "file not found" };
+      }
+      const isNsis = /[-_]Setup\.exe$/i.test(filePath);
+      if (isNsis) {
+        const child = require("child_process").spawn(filePath, [], { detached: true, stdio: "ignore" });
+        child.unref();
+        setTimeout(() => app.quit(), 1500);
+        return { ok: true };
+      }
+      const openError = await shell.openPath(filePath);
+      if (openError) {
+        shell.showItemInFolder(filePath);
+        return { ok: false, error: openError };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error?.message || "open failed" };
+    }
+  });
+
+ipcMain.handle("update:cancelDownload", () => {
+    try {
+      downloadCancelledByUser = true;
+      if (currentDownloadController) {
+        currentDownloadController.abort();
+        currentDownloadController = null;
+      }
+      const filePath = currentDownloadFilePath;
+      currentDownloadFilePath = null;
+      if (filePath && fs.existsSync(filePath)) {
+        try { fs.unlinkSync(filePath); } catch { /* ignore */ }
+      }
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "取消下载失败" };
+    }
+  });
+
   ipcMain.handle("update:download", async (event) => {
     const sendDownloadProgress = (progress) => {
       event.sender.send("update:downloadProgress", progress);
@@ -1711,31 +1855,12 @@ function wireWindowControls() {
       );
       if (!downloaded.ok) return { ...downloaded, ...info };
       sendDownloadProgress({
-        stage: "opening",
-        downloadedBytes: info.assetSize,
-        totalBytes: info.assetSize,
-        filePath: downloaded.filePath,
-      });
-      const openError = await shell.openPath(downloaded.filePath);
-      if (openError) {
-        shell.showItemInFolder(downloaded.filePath);
-        sendDownloadProgress({
-          stage: "done",
-          opened: false,
-          downloadedBytes: info.assetSize,
-          totalBytes: info.assetSize,
-          filePath: downloaded.filePath,
-        });
-        return { ok: true, ...info, filePath: downloaded.filePath, opened: false, error: openError };
-      }
-      sendDownloadProgress({
         stage: "done",
-        opened: true,
         downloadedBytes: info.assetSize,
         totalBytes: info.assetSize,
         filePath: downloaded.filePath,
       });
-      return { ok: true, ...info, filePath: downloaded.filePath, opened: true };
+      return { ok: true, ...info, filePath: downloaded.filePath, opened: false };
     } catch (error) {
       sendDownloadProgress({ stage: "error", error: error?.message || "下载更新失败" });
       return { ok: false, error: error?.message || "下载更新失败" };
