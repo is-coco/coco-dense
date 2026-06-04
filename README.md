@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.0-blue?style=flat-square" alt="version" />
+  <img src="https://img.shields.io/badge/version-0.4.6-blue?style=flat-square" alt="version" />
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey?style=flat-square" alt="platform" />
   <img src="https://img.shields.io/badge/license-proprietary-green?style=flat-square" alt="license" />
   <img src="https://img.shields.io/badge/electron-34-47848F?style=flat-square&logo=electron" alt="electron" />
@@ -30,7 +30,7 @@
 |------|------|------|
 | macOS | `Coco.Dense-x.x.x-arm64.dmg` | Apple Silicon 安装包 |
 | macOS | `Coco.Dense-x.x.x-arm64-mac.zip` | Apple Silicon 便携包 |
-| Windows | `Coco.Dense.x.x.x.exe` | 免安装便携版 |
+| Windows | `Coco.Dense-x.x.x-Setup.exe` | Windows 安装版 |
 
 ---
 
@@ -42,20 +42,25 @@
 - 密码强度实时检测，支持一键生成高强度随机密码
 - 备注区域可自由选中复制部分内容
 - 拼音首字母模糊搜索，快速定位条目
+- 搜索框 150ms 防抖，减少快速输入时的频繁重渲染
 
 ### 安全机制
 - AES-256-GCM 对称加密，PBKDF2 密钥派生（250,000 轮）
 - 数据钥匙（Data Key）独立加密，主密码与数据钥匙双重保护
-- 安全问题找回主密码，答案不明文存储
+- 安全问题找回主密码，答案不明文存储，最少 2 字符，实时强度提示
 - macOS Touch ID 指纹解锁
 - 剪贴板定时自动清除
 - 连续解锁失败锁定机制
 - 关闭窗口后自动清理内存
+- 导出备份时自动生成 SHA-256 校验和文件
 
 ### 数据同步
 - WebDAV 云端同步，支持坚果云等第三方服务
-- 双向合并，冲突自动处理
-- 加密文件导出 / 导入备份，支持手动迁移
+- 双向合并同步，冲突条目自动检测并提示覆盖数量
+- 同步状态实时显示：上次同步时间、上次检查时间
+- 区分「离线」和「同步失败」状态，减少误报
+- WebDAV 请求 30 秒超时，防止同步卡死
+- 同步操作互斥保护，自动同步与手动操作不冲突
 
 ### 界面与交互
 - 左侧文件夹 + 标签 + 优先级多维筛选
@@ -63,12 +68,15 @@
 - 自定义标题栏，支持最小化、最大化、关闭
 - 解锁后自动检查更新，发现新版本弹出更新日志卡片
 - 更新提醒支持「今日不再提醒」，同一天同一版本只弹一次
+- 更新提醒和文件夹折叠状态持久化到本地文件
 
 ### 自动更新
 - 解锁后自动检查 GitHub Release 最新版本
-- 发现新版本弹出卡片，显示当前版本与新版本号
+- 支持配置下载代理地址，解决 GitHub 访问受限问题
+- 下载 / 取消合并为一个按钮，根据状态自动切换
+- 下载完成后自动检测已下载安装包，显示「安装」按钮
+- NSIS 安装包：点击安装后自动启动安装器并退出当前应用
 - 更新日志区域固定高度，超出可滚动
-- 支持手动检查更新和跳转发布页
 
 ---
 
@@ -105,16 +113,17 @@ npm start
 npm run dist:mac
 ```
 
-**Windows 便携版（免安装）**
+**Windows 安装版**
 
-```powershell
-powershell -ExecutionPolicy Bypass -File build-unpacked.ps1
+```bash
+# 需要代理访问 GitHub 下载 winCodeSign 和 NSIS 工具
+HTTPS_PROXY=http://127.0.0.1:7892 npx electron-builder --win nsis --x64
 ```
 
-**Windows 单文件**
+**Windows 本地构建**
 
 ```powershell
-npm run dist:win
+powershell -ExecutionPolicy Bypass -File build-local.ps1
 ```
 
 ---
@@ -142,14 +151,20 @@ git push origin master --tags
 
 ```
 .
-├── index.html          # 页面结构
-├── styles.css          # 样式
-├── script.js           # 前端逻辑
-├── main.js             # Electron 主进程
-├── preload.js          # 预加载脚本
-├── assets/             # 图标和静态资源
-├── build-unpacked.ps1  # Windows 本地构建脚本
-└── package.json        # 项目配置
+├── index.html              # 页面结构
+├── styles.css              # 样式
+├── script.js               # 前端逻辑
+├── main.js                 # Electron 主进程
+├── preload.js              # 预加载脚本
+├── src/
+│   ├── main/
+│   │   └── crypto.js       # 加密解密模块
+│   └── renderer/
+│       └── utils.js        # 前端工具函数
+├── assets/                 # 图标和静态资源
+├── build-nsis.ps1          # Windows NSIS 本地构建脚本
+├── installer.nsh           # NSIS 安装器自定义脚本
+└── package.json            # 项目配置
 ```
 
 ---
