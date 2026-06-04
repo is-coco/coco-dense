@@ -1477,9 +1477,27 @@ downloadUpdateBtn.dataset.downloading = "true";
     }
     state.updateInfo = result;
     state.downloadedFilePath = result.filePath || "";
-    const installNow = window.confirm(`下载完成，是否立即安装？
-
-点击确定立即安装，点击取消稍后手动安装。`);
+    const installNow = await new Promise((resolve) => {
+      const modal = document.getElementById("installConfirmModal");
+      if (!modal) { resolve(true); return; }
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+      const okBtn = document.getElementById("installConfirmOkBtn");
+      const cancelBtn = document.getElementById("installConfirmCancelBtn");
+      const cleanup = () => {
+        modal.classList.add("hidden");
+        modal.setAttribute("aria-hidden", "true");
+        okBtn?.removeEventListener("click", onOk);
+        cancelBtn?.removeEventListener("click", onCancel);
+        modal.removeEventListener("click", onBg);
+      };
+      const onOk = () => { cleanup(); resolve(true); };
+      const onCancel = () => { cleanup(); resolve(false); };
+      const onBg = (e) => { if (e.target === modal) { cleanup(); resolve(false); } };
+      okBtn?.addEventListener("click", onOk);
+      cancelBtn?.addEventListener("click", onCancel);
+      modal.addEventListener("click", onBg);
+    });
     if (installNow) {
       await window.vault?.installDownloaded?.(state.downloadedFilePath);
       if (updateStatusText) updateStatusText.textContent = "正在打开安装包...";
@@ -1498,6 +1516,10 @@ downloadUpdateBtn.dataset.downloading = "true";
     if (downloadUpdateBtn && downloadUpdateBtn.dataset?.installMode !== "true") {
       downloadUpdateBtn.textContent = "下载";
       downloadUpdateBtn.disabled = false;
+      delete downloadUpdateBtn.dataset.downloading;
+    }
+    if (downloadUpdateBtn) {
+      delete downloadUpdateBtn.dataset.downloading;
     }
     syncUpdateSettings();
   }
@@ -2805,7 +2827,13 @@ async function saveRecoverySettings(event) {
     return;
   }
   const questions = [recoveryQuestion1.value];
+  const isMasked = recoveryAnswer1?.dataset?.secretMasked === "true";
   const answers = [recoveryAnswer1.value];
+  if (isMasked) {
+    showRecoverySettingsError("请点击答案输入框后输入新的答案");
+    recoveryAnswer1.focus();
+    return;
+  }
   if (!answers[0].trim()) {
     showRecoverySettingsError("请填写答案");
     return;
@@ -3570,9 +3598,9 @@ async function upsertEntry() {
 
   const index = state.entries.findIndex((entry) => entry.id === state.activeId);
   if (index >= 0) {
-    state.entries[index] = nextEntry;
+    state.entries = state.entries.map((entry, i) => i === index ? nextEntry : entry);
   } else {
-    state.entries.unshift(nextEntry);
+    state.entries = [nextEntry, ...state.entries];
     state.activeId = nextEntry.id;
   }
 
@@ -4271,23 +4299,25 @@ topSyncStatus?.addEventListener("click", () => {
   mergeWebdavNow();
 });
 
-[autoLockMinutes, clipboardClearSeconds, cloudCheckMinutes, passwordLengthSetting, copyConfirmSetting, welcomeSetting, backupExportSetting].forEach((node) => {
-  node?.addEventListener("change", async () => {
-    state.settings = normalizeSettings({
-      autoLockMinutes: autoLockMinutes?.value,
-      clipboardClearSeconds: clipboardClearSeconds?.value,
-      cloudCheckMinutes: cloudCheckMinutes?.value,
-      passwordLength: passwordLengthSetting?.value,
-      copyConfirm: copyConfirmSetting?.checked,
-      welcomeOnStart: welcomeSetting?.checked,
-      backupBeforeExport: backupExportSetting?.checked,
-      folders: state.settings?.folders,
-    });
-    syncSettingsForm();
-    await refreshVaultAfterMutation("设置已保存");
-    scheduleCloudSyncCheck();
-    touchActivity();
+const debouncedSettingsSave = debounce(async () => {
+  state.settings = normalizeSettings({
+    autoLockMinutes: autoLockMinutes?.value,
+    clipboardClearSeconds: clipboardClearSeconds?.value,
+    cloudCheckMinutes: cloudCheckMinutes?.value,
+    passwordLength: passwordLengthSetting?.value,
+    copyConfirm: copyConfirmSetting?.checked,
+    welcomeOnStart: welcomeSetting?.checked,
+    backupBeforeExport: backupExportSetting?.checked,
+    folders: state.settings?.folders,
   });
+  syncSettingsForm();
+  await refreshVaultAfterMutation("设置已保存");
+  scheduleCloudSyncCheck();
+  touchActivity();
+}, 250);
+
+[autoLockMinutes, clipboardClearSeconds, cloudCheckMinutes, passwordLengthSetting, copyConfirmSetting, welcomeSetting, backupExportSetting].forEach((node) => {
+  node?.addEventListener("change", debouncedSettingsSave);
 });
 
 document.querySelectorAll(".nav-item").forEach((nav) => {
