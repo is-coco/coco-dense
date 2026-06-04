@@ -67,6 +67,7 @@ function normalizeSettings(settings = {}) {
     copyConfirm: settings.copyConfirm !== false,
     welcomeOnStart: settings.welcomeOnStart !== false,
     backupBeforeExport: settings.backupBeforeExport !== false,
+    avatar: String(settings.avatar || ""),
     folders,
   };
 }

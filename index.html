@@ -635,6 +635,26 @@
                       </section>
 
                       <section class="settings-page hidden" data-settings-page="general">
+                          <div class="setting-card avatar-setting">
+                            <span>登录头像</span>
+                            <p class="avatar-hint">上传图片后裁剪，替换登录页锁图标。不设置则显示默认锁。</p>
+                            <div class="avatar-preview-row">
+                              <div class="avatar-preview" id="avatarPreview">
+                                <svg class="avatar-placeholder-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M8.5 10V8.2a3.5 3.5 0 0 1 7 0V10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                                  <rect x="5.5" y="10" width="13" height="9.5" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                                  <circle cx="12" cy="14.5" r="1.2" fill="currentColor"/>
+                                </svg>
+                              </div>
+                              <div class="avatar-btns">
+                                <button class="secondary-btn" type="button" id="uploadAvatarBtn">上传头像</button>
+                                <button class="secondary-btn danger-btn hidden" type="button" id="removeAvatarBtn">移除头像</button>
+                              </div>
+                            </div>
+                            <input type="file" id="avatarFileInput" accept="image/*" class="hidden" />
+                          </div>
+
+
                         <div class="settings-grid">
                           <label class="setting-card">
                             <span>生成密码长度</span>
@@ -991,6 +1011,24 @@
       <button type="button" role="menuitem" data-sidebar-action="new-folder">
         <span class="menu-label">新建分组</span>
       </button>
+    </div>
+
+    <div class="modal-backdrop hidden" id="avatarCropModal" aria-hidden="true">
+      <div class="modal-card avatar-crop-card">
+        <div class="modal-head">
+          <span>裁剪头像</span>
+          <button class="icon-btn" type="button" id="closeAvatarCropBtn" aria-label="关闭">&times;</button>
+        </div>
+        <div class="avatar-crop-area">
+          <canvas id="avatarCropCanvas"></canvas>
+          <div class="avatar-crop-ring"></div>
+        </div>
+        <p class="avatar-crop-hint">拖动图片调整位置，滚轮缩放</p>
+        <div class="modal-actions">
+          <button class="secondary-btn" type="button" id="cancelAvatarCropBtn">取消</button>
+          <button class="primary-btn" type="button" id="confirmAvatarCropBtn">应用头像</button>
+        </div>
+      </div>
     </div>
 
     <script src="./src/renderer/utils.js"></script>

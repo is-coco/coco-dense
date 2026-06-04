@@ -548,7 +548,7 @@ textarea::placeholder {
 .brand-compact {
   gap: 0;
   min-width: 0;
-  flex: 1 1 180px;
+  flex: 1 1 220px;
   padding-right: 8px;
 }
 
@@ -3067,3 +3067,119 @@ textarea::placeholder {
 .answer-strength-hint.strength-weak { color: #ff3b30; }
 .answer-strength-hint.strength-fair { color: #ff9500; }
 .answer-strength-hint.strength-good { color: #34c759; }
+
+/* ════════════════════════════════════════════════════════════════════
+   Avatar Upload & Crop
+   ════════════════════════════════════════════════════════════════════ */
+
+.avatar-setting {
+  grid-column: 1 / -1;
+}
+
+.avatar-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.avatar-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent-soft);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 2px solid rgba(60, 60, 67, 0.09);
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+}
+
+.avatar-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.danger-btn {
+  color: #e53935 !important;
+}
+
+.danger-btn:hover {
+  background: rgba(229, 57, 53, 0.08) !important;
+}
+
+/* Crop modal */
+.avatar-crop-card {
+  max-width: 420px;
+  width: 90vw;
+}
+
+.avatar-crop-area {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  margin: 12px auto;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #1a1a1a;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.avatar-crop-area:active {
+  cursor: grabbing;
+}
+
+.avatar-crop-area canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar-crop-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+  box-shadow: inset 0 0 0 200vmax rgba(0, 0, 0, 0.45);
+}
+
+.avatar-crop-hint {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+/* Login page avatar */
+.auth-mark .avatar-login-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.auth-mark.has-avatar {
+  background: transparent;
+}
+

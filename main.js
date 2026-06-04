@@ -19,6 +19,13 @@ const {
   verifyDataKeyVaultMaster, generateDataKeySecret,
 } = require("./src/main/crypto");
 
+const updater = require("./src/main/updater");
+const updaterState = require("./src/main/updater-state");
+const recoveryModule = require("./src/main/recovery");
+const syncModule = require("./src/main/sync");
+const biometricModule = require("./src/main/biometric");
+const datakeyModule = require("./src/main/datakey");
+
 let loginWindow = null;
 let vaultWindow = null;
 let vaultCache = null;
@@ -59,21 +66,14 @@ function sleep(ms) {
 }
 
 function stableStringify(value) {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
+  return syncModule.stableStringify(value);
 }
 
+
 function stableJsonHash(value) {
-  return crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
+  return syncModule.stableJsonHash(value);
 }
+
 
 // Crypto functions imported from src/main/crypto.js
 // Thin wrappers to inject activeDataKey as default for vault decryption
@@ -128,16 +128,19 @@ function getVaultFilePath() {
 }
 
 function getRecoveryFilePath() {
-  return path.join(app.getPath("userData"), "recovery.json");
+  return recoveryModule.getRecoveryFilePath();
 }
+
 
 function getSyncConfigFilePath() {
   return path.join(app.getPath("userData"), "sync.json");
 }
 
+
 function getBiometricFilePath() {
-  return path.join(app.getPath("userData"), "biometric.json");
+  return biometricModule.getBiometricFilePath(app);
 }
+
 
 function getFolderUiFilePath() {
   return path.join(app.getPath("userData"), "folder-ui.json");
@@ -171,443 +174,138 @@ function getUpdateProxyFilePath() {
   return path.join(app.getPath("userData"), "update-proxy.json");
 }
 
+
 function loadUpdateProxy() {
-  try {
-    const filePath = getUpdateProxyFilePath();
-    if (!fs.existsSync(filePath)) return "";
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    return String(raw?.proxyUrl || "").trim();
-  } catch {
-    return "";
-  }
+  return updaterState.loadUpdateProxy();
 }
 
+
 function saveUpdateProxy(proxyUrl) {
-  try {
-    const filePath = getUpdateProxyFilePath();
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify({ proxyUrl: String(proxyUrl || "").trim() }, null, 2), "utf8");
-  } catch { /* ignore */ }
+  return updaterState.saveUpdateProxy(proxyUrl);
 }
+
 
 function getUpdateReminderFilePath() {
   return path.join(app.getPath("userData"), "update-reminder.json");
 }
 
+
 function getDataKeyFilePath() {
-  return path.join(app.getPath("userData"), "data-key.json");
+  return datakeyModule.getDataKeyFilePath(app);
 }
+
 
 function normalizeRemotePath(remotePath) {
-  const trimmed = String(remotePath ?? "").trim() || "/CocoDense/vault.json";
-  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  return normalized.replace(/\/{2,}/g, "/");
+  return syncModule.normalizeRemotePath(remotePath);
 }
+
 
 function normalizeAppPassword(appPassword) {
-  return String(appPassword ?? "").replace(/\s+/g, "");
+  return syncModule.normalizeAppPassword(appPassword);
 }
+
 
 function normalizeServerUrl(serverUrl) {
-  const value = String(serverUrl ?? "").trim();
-  if (!value) return "";
-  const parsed = new URL(value);
-  if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
-    throw new Error("WebDAV 地址只允许 http 或 https");
-  }
-  if (!parsed.pathname.endsWith("/")) {
-    parsed.pathname = `${parsed.pathname}/`;
-  }
-  return parsed.href;
+  return syncModule.normalizeServerUrl(serverUrl);
 }
+
 
 function encryptLocalSecret(secret) {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("系统加密存储不可用");
-  }
-  return safeStorage.encryptString(String(secret ?? "")).toString("base64");
+  return syncModule.encryptLocalSecret(secret);
 }
+
 
 function decryptLocalSecret(secret) {
-  if (!secret) return "";
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("系统加密存储不可用");
-  }
-  return safeStorage.decryptString(Buffer.from(secret, "base64"));
+  return syncModule.decryptLocalSecret(secret);
 }
 
-function loadSyncConfig({ includePassword = false } = {}) {
-  const filePath = getSyncConfigFilePath();
-  if (!fs.existsSync(filePath)) {
-    return {
-      configured: false,
-      serverUrl: "",
-      username: "",
-      remotePath: "/CocoDense/vault.json",
-      updatedAt: "",
-      lastSyncedAt: "",
-      lastCheckedAt: "",
-      appPassword: "",
-    };
-  }
 
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    const config = {
-      configured: Boolean(raw?.serverUrl && raw?.username && raw?.password),
-      serverUrl: String(raw?.serverUrl ?? ""),
-      username: String(raw?.username ?? ""),
-      remotePath: normalizeRemotePath(raw?.remotePath),
-      updatedAt: String(raw?.updatedAt ?? ""),
-      lastSyncedAt: String(raw?.lastSyncedAt ?? ""),
-      lastCheckedAt: String(raw?.lastCheckedAt ?? ""),
-      appPassword: "",
-    };
-    if (includePassword && config.configured) {
-      config.appPassword = decryptLocalSecret(raw.password);
-    }
-    return config;
-  } catch {
-    return {
-      configured: false,
-      corrupted: true,
-      serverUrl: "",
-      username: "",
-      remotePath: "/CocoDense/vault.json",
-      updatedAt: "",
-      lastSyncedAt: "",
-      lastCheckedAt: "",
-      appPassword: "",
-    };
-  }
+function loadSyncConfig(options) {
+  return syncModule.loadSyncConfig(app, options);
 }
+
 
 function saveSyncConfig(config) {
-  let previous = {};
-  if (fs.existsSync(getSyncConfigFilePath())) {
-    try {
-      previous = JSON.parse(fs.readFileSync(getSyncConfigFilePath(), "utf8"));
-    } catch {
-      previous = {};
-    }
-  }
-  const serverUrl = normalizeServerUrl(config.serverUrl);
-  const username = String(config.username ?? "").trim();
-  const remotePath = normalizeRemotePath(config.remotePath);
-  const appPassword = normalizeAppPassword(config.appPassword);
-  if (!serverUrl) return { ok: false, error: "请填写 WebDAV 地址" };
-  if (!username) return { ok: false, error: "请填写 WebDAV 用户名" };
-  if (!appPassword && !previous.password) return { ok: false, error: "请填写 WebDAV 应用密码" };
-
-  const sameTarget =
-    String(previous.serverUrl ?? "") === serverUrl &&
-    String(previous.username ?? "").trim() === username &&
-    normalizeRemotePath(previous.remotePath ?? "/CocoDense/vault.json") === remotePath;
-  const content = {
-    version: 1,
-    serverUrl,
-    username,
-    remotePath,
-    password: appPassword ? encryptLocalSecret(appPassword) : previous.password,
-    updatedAt: new Date().toISOString(),
-    lastSyncedAt: sameTarget ? String(previous.lastSyncedAt ?? "") : "",
-    lastCheckedAt: sameTarget ? String(previous.lastCheckedAt ?? "") : "",
-  };
-  fs.mkdirSync(path.dirname(getSyncConfigFilePath()), { recursive: true });
-  fs.writeFileSync(getSyncConfigFilePath(), JSON.stringify(content, null, 2), "utf8");
-  return { ok: true, config: loadSyncConfig() };
+  return syncModule.saveSyncConfig(app, config);
 }
 
-function touchSyncLastSyncedAt(config, timestamp = new Date().toISOString()) {
-  const filePath = getSyncConfigFilePath();
-  if (!fs.existsSync(filePath)) return timestamp;
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    const sameTarget =
-      normalizeServerUrl(raw?.serverUrl) === config.serverUrl &&
-      String(raw?.username ?? "").trim() === config.username &&
-      normalizeRemotePath(raw?.remotePath) === config.remotePath;
-    if (!sameTarget) return timestamp;
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify({
-        ...raw,
-        lastSyncedAt: timestamp,
-        lastCheckedAt: timestamp,
-      }, null, 2),
-      "utf8",
-    );
-  } catch {
-    return timestamp;
-  }
-  return timestamp;
+
+function touchSyncLastSyncedAt(config, timestamp) {
+  return syncModule.touchSyncLastSyncedAt(app, config, timestamp);
 }
 
-function touchSyncLastCheckedAt(config, timestamp = new Date().toISOString()) {
-  const filePath = getSyncConfigFilePath();
-  if (!fs.existsSync(filePath)) return timestamp;
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    const sameTarget =
-      normalizeServerUrl(raw?.serverUrl) === config.serverUrl &&
-      String(raw?.username ?? "").trim() === config.username &&
-      normalizeRemotePath(raw?.remotePath) === config.remotePath;
-    if (!sameTarget) return timestamp;
-    fs.writeFileSync(
-      filePath,
-      JSON.stringify({
-        ...raw,
-        lastCheckedAt: timestamp,
-      }, null, 2),
-      "utf8",
-    );
-  } catch {
-    return timestamp;
-  }
-  return timestamp;
+
+function touchSyncLastCheckedAt(config, timestamp) {
+  return syncModule.touchSyncLastCheckedAt(app, config, timestamp);
 }
 
-function buildWebdavUrl(config, remotePath = config.remotePath) {
-  const base = new URL(config.serverUrl);
-  const basePath = base.pathname.endsWith("/") ? base.pathname : `${base.pathname}/`;
-  const normalizedPath = normalizeRemotePath(remotePath);
-  const encodedPath = normalizedPath
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  base.pathname = `${basePath}${encodedPath}`;
-  if (String(remotePath ?? "").endsWith("/") && !base.pathname.endsWith("/")) {
-    base.pathname = `${base.pathname}/`;
-  }
-  return base.href;
+
+function buildWebdavUrl(config, remotePath) {
+  return syncModule.buildWebdavUrl(config, remotePath);
 }
+
 
 function webdavAuthHeader(config) {
-  return `Basic ${Buffer.from(`${config.username}:${config.appPassword}`, "utf8").toString("base64")}`;
+  return syncModule.webdavAuthHeader(config);
 }
 
-async function webdavRequest(config, method, remotePath, options = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 30000);
-  try {
-    const response = await fetch(buildWebdavUrl(config, remotePath), {
-      method,
-      headers: {
-        Authorization: webdavAuthHeader(config),
-        ...options.headers,
-      },
-      body: options.body,
-      signal: controller.signal,
-    });
-    return response;
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      return { ok: false, status: 0, error: "请求超时" };
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+
+function webdavRequest(config, method, remotePath, options) {
+  return syncModule.webdavRequest(config, method, remotePath, options);
 }
+
 
 function webdavStatusError(status, fallback) {
-  if (status === 401) return "认证失败：请检查坚果云邮箱和 WebDAV 应用密码";
-  if (status === 403) return "没有权限：请检查 WebDAV 应用密码或远端路径权限";
-  if (status === 404) return "远端路径不存在";
-  if (status === 409) return "远端上级目录不存在";
-  return `${fallback}：${status}`;
+  return syncModule.webdavStatusError(status, fallback);
 }
+
 
 function getRemoteDirPath(remotePath) {
-  const parts = normalizeRemotePath(remotePath).split("/").filter(Boolean);
-  parts.pop();
-  return parts.length ? `/${parts.join("/")}` : "/";
+  return syncModule.getRemoteDirPath(remotePath);
 }
 
-async function ensureWebdavDirectory(config) {
-  const parts = getRemoteDirPath(config.remotePath).split("/").filter(Boolean);
-  let current = "";
-  for (const part of parts) {
-    current += `/${part}`;
-    const response = await webdavRequest(config, "MKCOL", `${current}/`);
-    if (![200, 201, 301, 302, 405].includes(response.status)) {
-      return { ok: false, error: webdavStatusError(response.status, `创建远端目录 ${current} 失败`) };
-    }
-  }
-  return { ok: true };
+
+function ensureWebdavDirectory(config) {
+  return syncModule.ensureWebdavDirectory(config);
 }
+
 
 function comparableEntryTime(entry) {
-  return Date.parse(entry?.updatedAt || entry?.lastUsedAt || entry?.createdAt || "") || 0;
+  return syncModule.comparableEntryTime(entry);
 }
+
 
 function mergeVaultPayloads(localPayload, remotePayload) {
-  const localMap = new Map();
-  const remoteMap = new Map();
-  (localPayload?.entries || []).forEach((e) => { if (e?.id) localMap.set(e.id, e); });
-  (remotePayload?.entries || []).forEach((e) => { if (e?.id) remoteMap.set(e.id, e); });
-
-  const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
-  const merged = [];
-  const conflicts = [];
-
-  for (const id of allIds) {
-    const local = localMap.get(id);
-    const remote = remoteMap.get(id);
-    if (local && remote) {
-      const localTime = comparableEntryTime(local);
-      const remoteTime = comparableEntryTime(remote);
-      if (localTime !== remoteTime) {
-        conflicts.push({
-          id,
-          site: local.site || remote.site || "",
-          localTime,
-          remoteTime,
-          winner: localTime > remoteTime ? "local" : "remote",
-        });
-      }
-      merged.push(localTime >= remoteTime ? local : remote);
-    } else {
-      merged.push(local || remote);
-    }
-  }
-
-  const localSettings = localPayload?.settings || {};
-  const remoteSettings = remotePayload?.settings || {};
-  const settingsKeys = new Set([...Object.keys(localSettings), ...Object.keys(remoteSettings)]);
-  const mergedSettings = {};
-  for (const key of settingsKeys) {
-    const localVal = localSettings[key];
-    const remoteVal = remoteSettings[key];
-    if (localVal === undefined) {
-      mergedSettings[key] = remoteVal;
-    } else if (remoteVal === undefined) {
-      mergedSettings[key] = localVal;
-    } else if (JSON.stringify(localVal) === JSON.stringify(remoteVal)) {
-      mergedSettings[key] = localVal;
-    } else {
-      mergedSettings[key] = localVal;
-      conflicts.push({ type: "setting", key, note: "取本地值" });
-    }
-  }
-
-  const now = new Date().toISOString();
-  return {
-    payload: {
-      version: 1,
-      createdAt: localPayload?.createdAt || remotePayload?.createdAt || now,
-      updatedAt: now,
-      entries: merged,
-      settings: mergedSettings,
-    },
-    conflicts,
-  };
+  return syncModule.mergeVaultPayloads(localPayload, remotePayload);
 }
+
 
 function payloadUpdatedTime(payload) {
-  return Date.parse(payload?.updatedAt || "") || 0;
+  return syncModule.payloadUpdatedTime(payload);
 }
 
-function resolveSyncConfig(candidate = {}) {
-  const stored = loadSyncConfig({ includePassword: true });
-  const config = {
-    serverUrl: candidate.serverUrl ?? stored.serverUrl,
-    username: candidate.username ?? stored.username,
-    remotePath: candidate.remotePath ?? stored.remotePath,
-    appPassword: candidate.appPassword || stored.appPassword,
-  };
-  return {
-    ...config,
-    serverUrl: normalizeServerUrl(config.serverUrl),
-    username: String(config.username ?? "").trim(),
-    remotePath: normalizeRemotePath(config.remotePath),
-    appPassword: normalizeAppPassword(config.appPassword),
-  };
+
+function resolveSyncConfig(candidate) {
+  return syncModule.resolveSyncConfig(app, candidate);
 }
+
 
 function validateSyncConfig(config) {
-  if (!config.serverUrl) return { ok: false, error: "请填写 WebDAV 地址" };
-  if (!config.username) return { ok: false, error: "请填写 WebDAV 用户名" };
-  if (!config.appPassword) return { ok: false, error: "请填写 WebDAV 应用密码" };
-  return { ok: true };
+  return syncModule.validateSyncConfig(config);
 }
 
-async function readRemoteVault(config, masterPassword) {
-  const response = await webdavRequest(config, "GET");
-  if (response.status === 404) {
-    return { ok: true, exists: false, payload: null };
-  }
-  if (!response.ok) {
-    return { ok: false, error: webdavStatusError(response.status, "读取远端文件失败") };
-  }
 
-  const wrapped = await response.json();
-  try {
-    const decrypted = decryptVault(masterPassword, wrapped, { dataKey: activeDataKey });
-    const nextWrapped = decrypted.legacy
-      ? encryptJson(masterPassword, decrypted.payload, {
-        dataKey: activeDataKey,
-        vaultKey: decrypted.vaultKey || undefined,
-        format: activeDataKey ? "v3" : "v2",
-      })
-      : wrapped;
-    return {
-      ok: true,
-      exists: true,
-      payload: decrypted.payload,
-      wrapped: nextWrapped,
-      legacy: decrypted.legacy,
-    };
-  } catch (error) {
-    if (error?.code === "DATA_KEY_REQUIRED") {
-      return {
-        ok: false,
-        needsDataKey: true,
-        error: "云端保险箱需要数据钥匙，请到设置的数据钥匙页面输入后再同步",
-      };
-    }
-    if (error?.code === "DATA_KEY_INVALID") {
-      return {
-        ok: false,
-        needsDataKey: true,
-        error: "云端保险箱的数据钥匙与本机不同，请到设置的数据钥匙页面输入正确钥匙",
-      };
-    }
-    if (error?.code === "MASTER_PASSWORD_INVALID") {
-      return { ok: false, error: "远端文件无法解密，请确认主密码是否一致" };
-    }
-    return { ok: false, error: "远端文件无法解密，请确认主密码是否一致" };
-  }
-}
-
-async function writeRemoteVault(config, wrapped) {
-  const expectedHash = stableJsonHash(wrapped);
-  const response = await webdavRequest(config, "PUT", undefined, {
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(wrapped, null, 2),
+function readRemoteVault(config, masterPassword) {
+  return syncModule.readRemoteVault(config, masterPassword, {
+    decryptVault, encryptJson, isDataKeyVault, activeDataKey,
   });
-  if (!response.ok) {
-    return { ok: false, error: webdavStatusError(response.status, "上传失败") };
-  }
-
-  for (let attempt = 0; attempt < REMOTE_WRITE_VERIFY_ATTEMPTS; attempt += 1) {
-    if (attempt > 0) await sleep(REMOTE_WRITE_VERIFY_DELAY_MS);
-    const verifyResponse = await webdavRequest(config, "GET");
-    if (!verifyResponse.ok) continue;
-    try {
-      const remoteWrapped = await verifyResponse.json();
-      if (stableJsonHash(remoteWrapped) === expectedHash) {
-        return { ok: true, lastSyncedAt: touchSyncLastSyncedAt(config) };
-      }
-    } catch (error) { console.error("Operation failed:", error?.message || error); }
-  }
-
-  return {
-    ok: false,
-    error: "上传后未能确认云端文件已更新，请稍后重试",
-  };
 }
+
+
+function writeRemoteVault(config, wrapped, options) {
+  return syncModule.writeRemoteVault(config, wrapped, options);
+}
+
 
 function applySyncedVault(masterPassword, payload, wrapped) {
   saveVaultFile(wrapped);
@@ -649,637 +347,197 @@ function encryptVaultForSave(masterPassword, payload) {
 }
 
 function canUseBiometricUnlock() {
-  return isMac && safeStorage.isEncryptionAvailable();
+  return biometricModule.canUseBiometricUnlock();
 }
+
 
 function loadBiometricFile() {
-  const filePath = getBiometricFilePath();
-  if (!fs.existsSync(filePath)) {
-    return { exists: false, corrupted: false, data: null };
-  }
-
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (!raw || typeof raw.secret !== "string") {
-      return { exists: true, corrupted: true, data: null };
-    }
-    return { exists: true, corrupted: false, data: raw };
-  } catch {
-    return { exists: true, corrupted: true, data: null };
-  }
+  return biometricModule.loadBiometricFile(app);
 }
+
 
 function biometricStatus() {
-  const state = loadBiometricFile();
-  const supported = canUseBiometricUnlock();
-  return {
-    supported,
-    configured: supported && state.exists && !state.corrupted,
-    corrupted: state.corrupted,
-    updatedAt: state.exists && !state.corrupted ? state.data.updatedAt : "",
-    unavailableReason: supported ? "" : "当前设备或系统不支持 Touch ID 解锁",
-  };
+  return biometricModule.biometricStatus(app);
 }
+
 
 function saveBiometricSecret(masterPassword) {
-  if (!canUseBiometricUnlock()) {
-    return { ok: false, error: "当前设备或系统不支持 Touch ID 解锁" };
-  }
-  if (!String(masterPassword ?? "").trim()) {
-    return { ok: false, error: "请先输入主密码" };
-  }
-
-  const encrypted = safeStorage.encryptString(String(masterPassword ?? ""));
-  const filePath = getBiometricFilePath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(
-    filePath,
-    JSON.stringify({
-      version: 1,
-      platform: process.platform,
-      secret: encrypted.toString("base64"),
-      updatedAt: new Date().toISOString(),
-    }, null, 2),
-    "utf8",
-  );
-  return { ok: true, status: biometricStatus() };
+  return biometricModule.saveBiometricSecret(app, masterPassword);
 }
+
 
 function deleteBiometricFile() {
-  const filePath = getBiometricFilePath();
-  if (!fs.existsSync(filePath)) return;
-  fs.unlinkSync(filePath);
+  return biometricModule.deleteBiometricFile(app);
 }
+
 
 
 function writeRememberedDataKeyFile(dataKey) {
-  const value = String(dataKey ?? "").trim();
-  if (!value) {
-    return { ok: false, error: "当前没有可记住的数据钥匙" };
-  }
-  if (!safeStorage.isEncryptionAvailable()) {
-    return { ok: false, error: "系统加密存储不可用，无法在本机记住数据钥匙" };
-  }
-
-  const encrypted = safeStorage.encryptString(value);
-  const filePath = getDataKeyFilePath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(
-    filePath,
-    JSON.stringify({
-      version: 1,
-      platform: process.platform,
-      secret: encrypted.toString("base64"),
-      updatedAt: new Date().toISOString(),
-    }, null, 2),
-    "utf8",
-  );
-  return { ok: true };
+  return datakeyModule.writeRememberedDataKeyFile(app, dataKey);
 }
+
 
 function loadDataKeyFile() {
-  const filePath = getDataKeyFilePath();
-  if (!fs.existsSync(filePath)) {
-    return { exists: false, corrupted: false, data: null };
-  }
-
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    if (!raw || typeof raw.secret !== "string") {
-      return { exists: true, corrupted: true, data: null };
-    }
-    return { exists: true, corrupted: false, data: raw };
-  } catch {
-    return { exists: true, corrupted: true, data: null };
-  }
+  return datakeyModule.loadDataKeyFile(app);
 }
+
 
 function dataKeyStatus() {
-  const state = loadDataKeyFile();
-  const supported = safeStorage.isEncryptionAvailable();
-  const vaultState = loadVaultFile();
-  return {
-    supported,
-    remembered: supported && state.exists && !state.corrupted,
-    sessionActive: Boolean(activeDataKey),
-    required: Boolean(vaultState.exists && !vaultState.corrupted && isDataKeyVault(vaultState.data)),
-    corrupted: state.corrupted,
-    updatedAt: state.exists && !state.corrupted ? state.data.updatedAt : "",
-    unavailableReason: supported ? "" : "系统加密存储不可用，无法在本机记住数据钥匙",
-  };
+  return datakeyModule.dataKeyStatus(app, { activeDataKey, loadVaultFile, isDataKeyVault });
 }
 
-function getSessionDataKey(fallback = "") {
-  return String(activeDataKey || fallback || "").trim();
+
+function getSessionDataKey(fallback) {
+  return datakeyModule.getSessionDataKey(activeDataKey, fallback);
 }
 
-function migrateVaultToDataKey(nextDataKey, previousDataKey = "") {
-  const dataKey = String(nextDataKey ?? "").trim();
-  if (!dataKey) return { ok: false, error: "请输入数据钥匙" };
-  if (!activeMasterPassword || !vaultCache) {
-    return { ok: true, migrated: false };
-  }
 
-  const vaultState = loadVaultFile();
-  if (!vaultState.exists || vaultState.corrupted) {
-    return { ok: true, migrated: false };
-  }
-
-  try {
-    const decryptOptions = {
-      dataKey: isDataKeyVault(vaultState.data) ? getSessionDataKey(previousDataKey || dataKey) : "",
-    };
-    const decrypted = decryptVault(activeMasterPassword, vaultState.data, decryptOptions);
-    const payload = {
-      ...decrypted.payload,
-      updatedAt: new Date().toISOString(),
-    };
-    const backupResult = createVaultBackup("before-data-key-migration");
-    if (!backupResult.ok) return { ok: false, error: backupResult.error || "自动备份失败，已取消迁移" };
-    const wrapped = encryptJson(activeMasterPassword, payload, {
-      format: "v3",
-      dataKey,
-      vaultKey: decrypted.vaultKey || undefined,
-    });
-    saveVaultFile(wrapped);
-    vaultCache = payload;
-    return { ok: true, migrated: true, vault: payload };
-  } catch (error) {
-    if (error?.code === "DATA_KEY_INVALID" || error?.code === "DATA_KEY_REQUIRED") {
-      return { ok: false, error: "当前数据钥匙不正确，无法迁移保险箱" };
-    }
-    return { ok: false, error: error?.message || "迁移数据钥匙失败" };
-  }
+function migrateVaultToDataKey(nextDataKey, previousDataKey) {
+  return datakeyModule.migrateVaultToDataKey(app, {
+    activeMasterPassword, activeDataKey, vaultCache,
+    loadVaultFile, isDataKeyVault, decryptVault, encryptJson,
+    saveVaultFile, createVaultBackup, broadcastStatus, broadcastVaultUpdated,
+  }, nextDataKey, previousDataKey);
 }
 
-function migrateVaultOffDataKey(previousDataKey = "") {
-  const vaultState = loadVaultFile();
-  if (!vaultState.exists || vaultState.corrupted || !isDataKeyVault(vaultState.data)) {
-    return { ok: true, migrated: false };
-  }
-  if (!activeMasterPassword || !vaultCache) {
-    return { ok: false, error: "请先解锁保险箱后再清除数据钥匙" };
-  }
 
-  const dataKey = String(previousDataKey ?? "").trim() || getSessionDataKey();
-  if (!dataKey) {
-    return { ok: false, error: "当前保险箱仍在使用数据钥匙，请先解锁后再清除" };
-  }
-
-  try {
-    const decrypted = decryptVault(activeMasterPassword, vaultState.data, { dataKey });
-    const payload = {
-      ...decrypted.payload,
-      updatedAt: new Date().toISOString(),
-    };
-    const backupResult = createVaultBackup("before-data-key-removal");
-    if (!backupResult.ok) return { ok: false, error: backupResult.error || "自动备份失败，已取消清除" };
-    const wrapped = encryptJson(activeMasterPassword, payload, {
-      format: "v2",
-      vaultKey: decrypted.vaultKey || undefined,
-    });
-    saveVaultFile(wrapped);
-    vaultCache = payload;
-    return { ok: true, migrated: true, vault: payload };
-  } catch (error) {
-    if (error?.code === "DATA_KEY_INVALID" || error?.code === "DATA_KEY_REQUIRED") {
-      return { ok: false, error: "当前数据钥匙不可用，无法清除" };
-    }
-    return { ok: false, error: error?.message || "清除数据钥匙失败" };
-  }
+function migrateVaultOffDataKey(previousDataKey) {
+  return datakeyModule.migrateVaultOffDataKey(app, {
+    activeMasterPassword, activeDataKey, vaultCache,
+    loadVaultFile, isDataKeyVault, decryptVault, encryptJson,
+    saveVaultFile, createVaultBackup, broadcastStatus, broadcastVaultUpdated,
+  }, previousDataKey);
 }
 
-function saveDataKeySecret(dataKey, options = {}) {
-  const value = String(dataKey ?? "").trim();
-  if (!value) {
-    return { ok: false, error: "请输入数据钥匙" };
-  }
-  const shouldRemember = Boolean(options.remember);
-  const supported = safeStorage.isEncryptionAvailable();
-  const previousDataKey = activeDataKey;
-  const migration = migrateVaultToDataKey(value, previousDataKey);
-  if (!migration.ok) return migration;
-  activeDataKey = value;
-  if (!shouldRemember) {
-    deleteDataKeyFile();
-    broadcastStatus();
-    return { ok: true, status: dataKeyStatus(), vault: migration.vault || null };
-  }
-  if (!supported) {
-    broadcastStatus();
-    return { ok: true, status: dataKeyStatus(), vault: migration.vault || null };
-  }
-  const persisted = writeRememberedDataKeyFile(value);
-  if (!persisted.ok) return persisted;
-  broadcastStatus();
-  return { ok: true, status: dataKeyStatus(), vault: migration.vault || null };
+
+function saveDataKeySecret(dataKey, options) {
+  return datakeyModule.saveDataKeySecret(app, {
+    activeMasterPassword, activeDataKey, vaultCache,
+    loadVaultFile, isDataKeyVault, decryptVault, encryptJson,
+    saveVaultFile, createVaultBackup, broadcastStatus, broadcastVaultUpdated,
+  }, dataKey, options);
 }
+
 
 function readRememberedDataKey() {
-  const state = loadDataKeyFile();
-  if (!state.exists) return { ok: false, error: "本机还没有记住数据钥匙" };
-  if (state.corrupted) return { ok: false, error: "本机数据钥匙配置已损坏" };
-  if (!safeStorage.isEncryptionAvailable()) {
-    return { ok: false, error: "系统加密存储不可用，无法读取数据钥匙" };
-  }
-  try {
-    const dataKey = safeStorage.decryptString(Buffer.from(state.data.secret, "base64"));
-    activeDataKey = dataKey;
-    return { ok: true, dataKey };
-  } catch {
-    return { ok: false, error: "无法读取本机数据钥匙，请重新输入" };
-  }
+  return datakeyModule.readRememberedDataKey(app);
 }
+
 
 function deleteDataKeyFile() {
-  const filePath = getDataKeyFilePath();
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  return datakeyModule.deleteDataKeyFile(app);
 }
+
 
 function setRememberedDataKey(remember) {
-  const shouldRemember = Boolean(remember);
-  if (!shouldRemember) {
-    deleteDataKeyFile();
-    broadcastStatus();
-    return { ok: true, status: dataKeyStatus() };
-  }
-
-  const currentDataKey = getSessionDataKey();
-  if (!currentDataKey) {
-    return { ok: false, error: "当前没有可记住的数据钥匙，请先保存数据钥匙" };
-  }
-
-  const persisted = writeRememberedDataKeyFile(currentDataKey);
-  if (!persisted.ok) return persisted;
-  activeDataKey = currentDataKey;
-  broadcastStatus();
-  return { ok: true, status: dataKeyStatus() };
+  return datakeyModule.setRememberedDataKey(app, { activeDataKey }, remember);
 }
 
-function clearDataKeySecret({ forgetRemembered = true } = {}) {
-  const previousDataKey = activeDataKey;
-  const migration = migrateVaultOffDataKey(previousDataKey);
-  if (!migration.ok) return migration;
-  activeDataKey = "";
-  if (forgetRemembered) deleteDataKeyFile();
-  broadcastStatus();
-  return { ok: true, status: dataKeyStatus(), vault: migration.vault || null, migrated: Boolean(migration.migrated) };
+
+function clearDataKeySecret(options) {
+  return datakeyModule.clearDataKeySecret(app, {
+    activeMasterPassword, activeDataKey, vaultCache,
+    loadVaultFile, isDataKeyVault, decryptVault, encryptJson,
+    saveVaultFile, createVaultBackup, broadcastStatus, broadcastVaultUpdated,
+  }, options);
 }
+
 
 function loadRememberedDataKeyIntoSession() {
-  const state = loadDataKeyFile();
-  if (!state.exists || state.corrupted || !safeStorage.isEncryptionAvailable()) return;
-  try {
-    activeDataKey = safeStorage.decryptString(Buffer.from(state.data.secret, "base64"));
-  } catch {
-    activeDataKey = "";
-  }
+  const remembered = datakeyModule.loadRememberedDataKeyIntoSession(app);
+  if (remembered) activeDataKey = remembered;
 }
+
 
 function readBiometricSecret() {
-  const state = loadBiometricFile();
-  if (!state.exists) {
-    return { ok: false, error: "还没有启用 Touch ID 解锁" };
-  }
-  if (state.corrupted) {
-    return { ok: false, error: "Touch ID 解锁配置已损坏，请重新启用" };
-  }
-  if (!canUseBiometricUnlock()) {
-    return { ok: false, error: "当前设备或系统不支持 Touch ID 解锁" };
-  }
-
-  try {
-    return {
-      ok: true,
-      masterPassword: safeStorage.decryptString(Buffer.from(state.data.secret, "base64")),
-    };
-  } catch {
-    return { ok: false, error: "无法读取 Touch ID 解锁密钥，请重新启用" };
-  }
+  return biometricModule.readBiometricSecret(app);
 }
+
 
 function normalizeRecoveryAnswer(answer) {
-  return String(answer ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return recoveryModule.normalizeRecoveryAnswer(answer);
 }
 
-function buildRecoverySecret(answers = []) {
-  return answers.map(normalizeRecoveryAnswer).join("|");
+
+function buildRecoverySecret(answers) {
+  return recoveryModule.buildRecoverySecret(answers);
 }
+
 
 function loadRecoveryFile() {
-  const filePath = getRecoveryFilePath();
-  if (!fs.existsSync(filePath)) {
-    return { exists: false, corrupted: false, data: null };
-  }
-
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    const questions = Array.isArray(raw?.questions) ? raw.questions : [];
-    if (questions.length !== 1 || !raw?.wrapped) {
-      return { exists: true, corrupted: true, data: null };
-    }
-    return { exists: true, corrupted: false, data: raw };
-  } catch {
-    return { exists: true, corrupted: true, data: null };
-  }
+  return recoveryModule.loadRecoveryFile();
 }
+
 
 function recoveryStatus() {
-  const recovery = loadRecoveryFile();
-  return {
-    configured: recovery.exists && !recovery.corrupted,
-    corrupted: recovery.corrupted,
-    questions: recovery.exists && !recovery.corrupted ? recovery.data.questions : [],
-    updatedAt: recovery.exists && !recovery.corrupted ? recovery.data.updatedAt : "",
-  };
+  return recoveryModule.recoveryStatus();
 }
+
 
 function saveRecoveryFile(content) {
-  const filePath = getRecoveryFilePath();
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(content, null, 2), "utf8");
+  return recoveryModule.saveRecoveryFile(content);
 }
+
 
 function deleteRecoveryFile() {
-  const filePath = getRecoveryFilePath();
-  if (!fs.existsSync(filePath)) return;
-  fs.unlinkSync(filePath);
+  return recoveryModule.deleteRecoveryFile();
 }
+
 
 function getBackupDirPath() {
-  return path.join(app.getPath("userData"), "backups");
+  return recoveryModule.getBackupDirPath();
 }
+
 
 function trimBackups() {
-  const backupDir = getBackupDirPath();
-  if (!fs.existsSync(backupDir)) return;
-  const files = fs
-    .readdirSync(backupDir)
-    .map((name) => {
-      const fullPath = path.join(backupDir, name);
-      const stat = fs.statSync(fullPath);
-      return { fullPath, mtimeMs: stat.mtimeMs };
-    })
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
-
-  files.slice(BACKUP_LIMIT).forEach((file) => {
-    try {
-      fs.unlinkSync(file.fullPath);
-    } catch (error) { console.error("Operation failed:", error?.message || error); }
-  });
+  return recoveryModule.trimBackups();
 }
 
-function createVaultBackup(reason = "manual") {
-  const filePath = getVaultFilePath();
-  if (!fs.existsSync(filePath)) {
-    return { ok: false, error: "当前没有可备份的保险箱" };
-  }
 
-  const backupDir = getBackupDirPath();
-  fs.mkdirSync(backupDir, { recursive: true });
-  const safeReason = String(reason ?? "backup").replace(/[^a-zA-Z0-9-]+/g, "-").slice(0, 24) || "backup";
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = path.join(backupDir, `vault-${stamp}-${safeReason}.json`);
-  fs.copyFileSync(filePath, backupPath);
-  trimBackups();
-  return { ok: true, filePath: backupPath };
+function createVaultBackup(reason) {
+  return recoveryModule.createVaultBackup(reason);
 }
+
 
 function validateExternalUrl(targetUrl) {
-  try {
-    const parsed = new URL(String(targetUrl ?? "").trim());
-    if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
-      return { ok: false, error: "只允许打开 http 或 https 链接" };
-    }
-    return { ok: true, href: parsed.href };
-  } catch {
-    return { ok: false, error: "网址格式无效" };
-  }
+  return updater.validateExternalUrl(targetUrl);
 }
+
 
 function normalizeVersion(version) {
-  return String(version ?? "").trim().replace(/^v/i, "").split("-")[0];
+  return updater.normalizeVersion(version);
 }
+
 
 function compareVersions(currentVersion, nextVersion) {
-  const currentParts = normalizeVersion(currentVersion).split(".").map((part) => Number(part) || 0);
-  const nextParts = normalizeVersion(nextVersion).split(".").map((part) => Number(part) || 0);
-  const length = Math.max(currentParts.length, nextParts.length);
-  for (let index = 0; index < length; index += 1) {
-    const current = currentParts[index] || 0;
-    const next = nextParts[index] || 0;
-    if (next > current) return 1;
-    if (next < current) return -1;
-  }
-  return 0;
+  return updater.compareVersions(currentVersion, nextVersion);
 }
+
 
 function selectReleaseAsset(release) {
-  const assets = Array.isArray(release?.assets) ? release.assets : [];
-  const platform = process.platform;
-  const arch = process.arch;
-  if (platform === "darwin") {
-    const dmgAssets = assets.filter((asset) => /\.dmg$/i.test(asset?.name || ""));
-    return (
-      dmgAssets.find((asset) => arch === "arm64" && /arm64/i.test(asset.name || "")) ||
-      dmgAssets[0] ||
-      assets.find((asset) => /\.zip$/i.test(asset?.name || ""))
-    );
-  }
-  if (platform === "win32") {
-    const exeAssets = assets.filter((asset) => /\.exe$/i.test(asset?.name || ""));
-    return (
-      exeAssets.find((asset) => /[-_]Setup\.exe$/i.test(asset.name || "")) ||
-      exeAssets.find((asset) => /[-_]installer\.exe$/i.test(asset.name || "")) ||
-      exeAssets[0] ||
-      null
-    );
-  }
-  return null;
+  return updater.selectReleaseAsset(release);
 }
 
-async function fetchLatestRelease() {
-  const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "Coco-Dense-Updater",
-    },
-  });
-  if (!response.ok) {
-    return { ok: false, error: `检查更新失败：${response.status}` };
-  }
-  return { ok: true, release: await response.json() };
+
+function fetchLatestRelease() {
+  return updater.fetchLatestRelease();
 }
+
 
 function normalizeReleaseInfo(release) {
-  const currentVersion = app.getVersion();
-  const latestVersion = String(release?.tag_name || release?.name || "").replace(/^v/i, "");
-  const asset = selectReleaseAsset(release);
-  return {
-    currentVersion,
-    latestVersion,
-    updateAvailable: compareVersions(currentVersion, latestVersion) > 0,
-    releaseName: release?.name || release?.tag_name || "",
-    releaseUrl: release?.html_url || "https://github.com/is-coco/coco-dense/releases",
-    notes: release?.body || "",
-    assetName: asset?.name || "",
-    assetUrl: asset?.browser_download_url || "",
-    assetSize: Number(asset?.size) || 0,
-    platform: process.platform,
-    arch: process.arch,
-  };
+  return updater.normalizeReleaseInfo(release);
 }
+
 
 function safeDownloadName(name) {
-  return String(name || "Coco-Dense-update")
-    .replace(/[\\/:*?"<>|]+/g, "-")
-    .replace(/\s+/g, ".")
-    .slice(0, 160);
+  return updater.safeDownloadName(name);
 }
 
-async function downloadReleaseAsset(assetUrl, assetName, assetSize = 0, onProgress = () => {}) {
-  const parsed = new URL(String(assetUrl || ""));
-  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
-    return { ok: false, error: "更新地址无效" };
-  }
 
-  const filePath = path.join(app.getPath("downloads"), safeDownloadName(assetName));
-  const totalBytes = Number(assetSize) || 0;
-  const proxyUrl = loadUpdateProxy();
-  const downloadUrls = [];
-  if (proxyUrl) {
-    downloadUrls.push(proxyUrl + parsed.href);
-  }
-  downloadUrls.push(parsed.href);
-  for (const mirror of GITHUB_DOWNLOAD_MIRRORS) {
-    if (!proxyUrl || mirror !== proxyUrl) {
-      downloadUrls.push(mirror + parsed.href);
-    }
-  }
-
-  let lastError = null;
-  downloadCancelledByUser = false;
-  currentDownloadFilePath = filePath;
-  for (let attempt = 0; attempt < downloadUrls.length; attempt++) {
-    const url = downloadUrls[attempt];
-    const isMirror = attempt > 0;
-    try {
-      onProgress({
-        stage: "connecting",
-        downloadedBytes: 0,
-        totalBytes,
-        source: isMirror ? "镜像加速" : "GitHub 直连",
-      });
-
-      const controller = new AbortController();
-      currentDownloadController = controller;
-      const timeoutMs = isMirror ? 120000 : 20000;
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-      let response;
-      try {
-        response = await fetch(url, {
-          headers: { "User-Agent": "Coco-Dense-Updater" },
-          signal: controller.signal,
-          redirect: "follow",
-        });
-      } catch (fetchErr) {
-        clearTimeout(timeout);
-        if (fetchErr?.name === "AbortError") {
-          if (downloadCancelledByUser) {
-            onProgress({ stage: "cancelled", downloadedBytes: 0, totalBytes });
-            currentDownloadController = null;
-            currentDownloadFilePath = null;
-            return { ok: false, error: "下载已取消", cancelled: true };
-          }
-          lastError = new Error(isMirror ? "镜像下载超时" : "直连超时，尝试镜像加速");
-          continue;
-        }
-        throw fetchErr;
-      }
-      clearTimeout(timeout);
-
-      if (!response.ok || !response.body) {
-        lastError = new Error(`下载失败: ${response.status}`);
-        if (!isMirror) continue;
-        return { ok: false, error: lastError.message };
-      }
-
-      let downloadedBytes = 0;
-      let lastProgressAt = 0;
-      const startedAt = Date.now();
-      let abortedBySpeed = false;
-
-      const progressStream = new Transform({
-        transform(chunk, _encoding, callback) {
-          downloadedBytes += chunk.length;
-          const now = Date.now();
-          if (now - lastProgressAt > 120 || (totalBytes && downloadedBytes >= totalBytes)) {
-            lastProgressAt = now;
-            const elapsed = now - startedAt;
-            const speed = elapsed > 0 ? (downloadedBytes / elapsed) * 1000 : 0;
-            if (!isMirror && attempt === 0 && elapsed > 10000 && speed < 50000) {
-              abortedBySpeed = true;
-              controller.abort();
-              callback(new Error("SPEED_TOO_SLOW"));
-              return;
-            }
-            onProgress({
-              stage: "downloading",
-              downloadedBytes,
-              totalBytes,
-              elapsedMs: elapsed,
-              source: isMirror ? "镜像加速" : "GitHub 直连",
-            });
-          }
-          callback(null, chunk);
-        },
-      });
-
-      try {
-        await pipeline(Readable.fromWeb(response.body), progressStream, fs.createWriteStream(filePath));
-      } catch (pipeErr) {
-        if (downloadCancelledByUser) {
-          onProgress({ stage: "cancelled", downloadedBytes, totalBytes });
-          currentDownloadController = null;
-          currentDownloadFilePath = null;
-          return { ok: false, error: "下载已取消", cancelled: true };
-        }
-        if (pipeErr?.message === "SPEED_TOO_SLOW" || abortedBySpeed) {
-          lastError = new Error("直连速度过慢，正在切换镜像加速");
-          continue;
-        }
-        throw pipeErr;
-      }
-
-      onProgress({
-        stage: "downloaded",
-        downloadedBytes,
-        totalBytes: downloadedBytes,
-        elapsedMs: Date.now() - startedAt,
-        filePath,
-        source: isMirror ? "镜像加速" : "GitHub 直连",
-      });
-      currentDownloadController = null;
-      currentDownloadFilePath = null;
-      return { ok: true, filePath, source: isMirror ? "mirror" : "direct" };
-    } catch (err) {
-      if (downloadCancelledByUser) {
-        currentDownloadController = null;
-        currentDownloadFilePath = null;
-        return { ok: false, error: "下载已取消", cancelled: true };
-      }
-      lastError = err;
-      if (!isMirror) continue;
-      currentDownloadController = null;
-      currentDownloadFilePath = null;
-      return { ok: false, error: err?.message || "下载失败" };
-    }
-  }
-  currentDownloadController = null;
-  currentDownloadFilePath = null;
-  return { ok: false, error: lastError?.message || "下载失败" };
+function downloadReleaseAsset(assetUrl, assetName, assetSize, onProgress) {
+  return updater.downloadReleaseAsset(assetUrl, assetName, assetSize, onProgress);
 }
+
 
 
 function resetUnlockFailures() {
@@ -1893,7 +1151,7 @@ ipcMain.handle("update:cancelDownload", () => {
       }
 
       const wrapped = encryptVaultForSave(masterPassword, localPayload);
-      const uploadResult = await writeRemoteVault(config, wrapped);
+      const uploadResult = await writeRemoteVault(config, wrapped, { app });
       if (!uploadResult.ok) return uploadResult;
       applySyncedVault(masterPassword, localPayload, wrapped);
       return {
@@ -1970,7 +1228,7 @@ ipcMain.handle("update:cancelDownload", () => {
         if (!backupResult.ok) return { ok: false, error: "自动备份失败，已取消同步" };
       }
 
-      const uploadResult = await writeRemoteVault(config, remoteWrapped);
+      const uploadResult = await writeRemoteVault(config, remoteWrapped, { app });
       if (!uploadResult.ok) return uploadResult;
       applySyncedVault(masterPassword, nextPayload, remoteWrapped);
       const entryConflicts = mergeConflicts.filter((c) => !c.type);
@@ -2350,6 +1608,36 @@ ipcMain.handle("update:cancelDownload", () => {
         return { ok: false, error: "数据钥匙不正确，无法导入保险箱" };
       }
       return { ok: false, error: "导入失败，文件格式或密码不正确" };
+    }
+  });
+
+  ipcMain.handle("avatar:get", () => {
+    try {
+      const filePath = path.join(app.getPath("userData"), "login-avatar.json");
+      if (!fs.existsSync(filePath)) return { ok: true, avatar: "" };
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      return { ok: true, avatar: String(raw?.avatar || "") };
+    } catch {
+      return { ok: true, avatar: "" };
+    }
+  });
+  ipcMain.handle("avatar:save", (_event, avatarData) => {
+    try {
+      const filePath = path.join(app.getPath("userData"), "login-avatar.json");
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, JSON.stringify({ avatar: String(avatarData || "") }, null, 2), "utf8");
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
+  ipcMain.handle("avatar:remove", () => {
+    try {
+      const filePath = path.join(app.getPath("userData"), "login-avatar.json");
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      return { ok: true };
+    } catch {
+      return { ok: false };
     }
   });
 

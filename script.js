@@ -1,3 +1,7 @@
+// ════════════════════════════════════════════════════════════════════
+// DOM References
+// ════════════════════════════════════════════════════════════════════
+
 ﻿const authScreen = document.getElementById("authScreen");
 const vaultScreen = document.getElementById("vaultScreen");
 const unlockForm = document.getElementById("unlockForm");
@@ -81,6 +85,16 @@ const passwordLengthSetting = document.getElementById("passwordLengthSetting");
 const copyConfirmSetting = document.getElementById("copyConfirmSetting");
 const welcomeSetting = document.getElementById("welcomeSetting");
 const backupExportSetting = document.getElementById("backupExportSetting");
+const avatarPreview = document.getElementById("avatarPreview");
+const uploadAvatarBtn = document.getElementById("uploadAvatarBtn");
+const removeAvatarBtn = document.getElementById("removeAvatarBtn");
+const avatarFileInput = document.getElementById("avatarFileInput");
+const avatarCropModal = document.getElementById("avatarCropModal");
+const avatarCropCanvas = document.getElementById("avatarCropCanvas");
+const closeAvatarCropBtn = document.getElementById("closeAvatarCropBtn");
+const cancelAvatarCropBtn = document.getElementById("cancelAvatarCropBtn");
+const confirmAvatarCropBtn = document.getElementById("confirmAvatarCropBtn");
+const authMark = document.querySelector(".auth-mark");
 const clearAllEntriesBtn = document.getElementById("clearAllEntriesBtn");
 const changePasswordModal = document.getElementById("changePasswordModal");
 const changePasswordForm = document.getElementById("changePasswordForm");
@@ -194,6 +208,10 @@ const FILTER_DEFAULT_LABELS = {
 };
 
 const UPDATE_REMINDER_STORAGE_KEY = "coco-dense-update-reminder";
+
+// ════════════════════════════════════════════════════════════════════
+// Constants & Application State
+// ════════════════════════════════════════════════════════════════════
 
 const SECRET_MASK = "●●●●●●●●";
 
@@ -337,6 +355,10 @@ const state = {
 
 
 
+
+// ════════════════════════════════════════════════════════════════════
+// Filter & Sidebar
+// ════════════════════════════════════════════════════════════════════
 
 function getAllTags(entries = getVisibleEntries()) {
   const tags = new Set();
@@ -540,6 +562,10 @@ function renderTagSuggestions() {
 
 
 
+
+// ════════════════════════════════════════════════════════════════════
+// UI Helpers (toast, clipboard, confirm, secret mask)
+// ════════════════════════════════════════════════════════════════════
 
 function showToast(message) {
   toast.textContent = message;
@@ -830,6 +856,10 @@ function syncPrimaryActionButton() {
   newEntryBtn.textContent = isSettingsOpen() ? "返回" : state.editing ? "保存" : "新增";
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Sync Status & Cloud Sync
+// ════════════════════════════════════════════════════════════════════
+
 function formatStatusTime(label, value) {
   if (!value) return `${label}：--`;
   const date = new Date(value);
@@ -1029,6 +1059,10 @@ function resolveDetailMode(mode) {
   return hasActiveSelection() ? "read" : "welcome";
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Detail Mode & Settings Panel
+// ════════════════════════════════════════════════════════════════════
+
 function syncDetailSurface() {
   const mode = resolveDetailMode(state.detailMode);
   const showWelcome = mode === "welcome";
@@ -1145,6 +1179,126 @@ function syncSettingsForm() {
   syncSettingsNavigation();
   syncDataKeySettings();
   syncUpdateSettings();
+  syncAvatarSettings();
+}
+
+/* --- Avatar Upload & Crop --- */
+
+let cropState = { img: null, offsetX: 0, offsetY: 0, scale: 1, dragging: false, dragStartX: 0, dragStartY: 0 };
+
+function syncAvatarSettings() {
+  const avatar = state.settings && state.settings.avatar || "";
+  if (avatarPreview) {
+    const existingImg = avatarPreview.querySelector("img");
+    if (avatar) {
+      if (!existingImg) {
+        const img = document.createElement("img");
+        img.src = avatar;
+        img.alt = "头像";
+        avatarPreview.innerHTML = "";
+        avatarPreview.appendChild(img);
+      } else {
+        existingImg.src = avatar;
+      }
+      avatarPreview.classList.add("has-avatar");
+    } else {
+      avatarPreview.innerHTML = '<svg class="avatar-placeholder-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 10V8.2a3.5 3.5 0 0 1 7 0V10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5.5" y="10" width="13" height="9.5" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="14.5" r="1.2" fill="currentColor"/></svg>';
+      avatarPreview.classList.remove("has-avatar");
+    }
+  }
+  if (removeAvatarBtn) {
+    removeAvatarBtn.classList.toggle("hidden", !avatar);
+  }
+}
+
+function applyLoginAvatar() {
+  if (!authMark) return;
+  var avatar = state.settings && state.settings.avatar || "";
+  var existingImg = authMark.querySelector(".avatar-login-img");
+  var svgIcon = authMark.querySelector(".mark-icon");
+
+  if (avatar) {
+    if (!existingImg) {
+      var img = document.createElement("img");
+      img.className = "avatar-login-img";
+      img.alt = "头像";
+      img.style.cssText = "width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;";
+      authMark.appendChild(img);
+    }
+    existingImg = authMark.querySelector(".avatar-login-img");
+    if (existingImg) existingImg.src = avatar;
+    if (svgIcon) svgIcon.style.display = "none";
+    authMark.style.background = "transparent";
+  } else {
+    if (existingImg) existingImg.remove();
+    if (svgIcon) {
+      svgIcon.style.display = "";
+      svgIcon.classList.remove("hidden");
+    }
+    authMark.style.background = "";
+    authMark.classList.remove("has-avatar");
+  }
+}
+
+function openAvatarCropModal(imageUrl) {
+  if (!avatarCropModal || !avatarCropCanvas) return;
+  const img = new Image();
+  img.onload = function() {
+    cropState = { img: img, offsetX: 0, offsetY: 0, scale: 1, dragging: false, dragStartX: 0, dragStartY: 0 };
+    avatarCropModal.classList.remove("hidden");
+    avatarCropModal.setAttribute("aria-hidden", "false");
+    drawCropCanvas();
+  };
+  img.src = imageUrl;
+}
+
+function closeAvatarCropModal() {
+  if (!avatarCropModal) return;
+  avatarCropModal.classList.add("hidden");
+  avatarCropModal.setAttribute("aria-hidden", "true");
+  cropState.img = null;
+}
+
+function drawCropCanvas() {
+  var canvas = avatarCropCanvas;
+  var ctx = canvas.getContext("2d");
+  var size = 280;
+  canvas.width = size * 2;
+  canvas.height = size * 2;
+  canvas.style.width = size + "px";
+  canvas.style.height = size + "px";
+  ctx.clearRect(0, 0, size * 2, size * 2);
+
+  var img = cropState.img;
+  if (!img) return;
+
+  var imgAspect = img.width / img.height;
+  var drawW, drawH;
+  if (imgAspect > 1) {
+    drawH = size * 2 * cropState.scale;
+    drawW = drawH * imgAspect;
+  } else {
+    drawW = size * 2 * cropState.scale;
+    drawH = drawW / imgAspect;
+  }
+
+  var cx = size + cropState.offsetX;
+  var cy = size + cropState.offsetY;
+  ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
+}
+
+function getCroppedAvatarData() {
+  var canvas = avatarCropCanvas;
+  var size = 280;
+  var outCanvas = document.createElement("canvas");
+  outCanvas.width = 256;
+  outCanvas.height = 256;
+  var outCtx = outCanvas.getContext("2d");
+  outCtx.beginPath();
+  outCtx.arc(128, 128, 128, 0, Math.PI * 2);
+  outCtx.clip();
+  outCtx.drawImage(canvas, 0, 0, size * 2, size * 2, 0, 0, 256, 256);
+  return outCanvas.toDataURL("image/png");
 }
 
 function syncRecoverySettings() {
@@ -1536,6 +1690,10 @@ async function autoCheckForAppUpdatesAfterUnlock() {
   state.updateAutoChecked = true;
   await checkForAppUpdates();
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Cloud Sync Timer & Auto-Sync
+// ════════════════════════════════════════════════════════════════════
 
 function getCloudSyncIntervalMs() {
   const minutes = Number(state.settings.cloudCheckMinutes);
@@ -2100,6 +2258,10 @@ function loadUpdateReminderState() {
   try {
     const raw = window.localStorage?.getItem(UPDATE_REMINDER_STORAGE_KEY) || "";
     const parsed = raw ? JSON.parse(raw) : {};
+// ════════════════════════════════════════════════════════════════════
+// Update Reminder & UI State Persistence
+// ════════════════════════════════════════════════════════════════════
+
     if (!parsed || typeof parsed !== "object") return { mutedDate: "", mutedVersion: "" };
     return {
       mutedDate: String(parsed.mutedDate || ""),
@@ -2391,6 +2553,10 @@ function showEntryContextMenu(event, entry) {
   if (!entryContextMenu || !entry) return;
   event.preventDefault();
   event.stopPropagation();
+// ════════════════════════════════════════════════════════════════════
+// Context Menus & Folder Operations
+// ════════════════════════════════════════════════════════════════════
+
   hideFolderContextMenu();
   hideSidebarContextMenu();
   state.contextEntryId = entry.id;
@@ -2820,6 +2986,10 @@ async function toggleRememberDataKeySetting() {
   touchActivity();
 }
 
+// ════════════════════════════════════════════════════════════════════
+// Security Settings (Recovery, Biometric, Data Key)
+// ════════════════════════════════════════════════════════════════════
+
 async function saveRecoverySettings(event) {
   event?.preventDefault();
   if (!state.unlocked || !state.masterPassword) {
@@ -3129,6 +3299,11 @@ async function initAuthState() {
   await refreshBiometricStatus();
   await refreshDataKeyStatus();
   await refreshWebdavConfig();
+  const avatarResult = await window.vault?.getAvatar?.();
+  if (avatarResult?.avatar) {
+    state.settings = normalizeSettings({ ...state.settings, avatar: avatarResult.avatar });
+    applyLoginAvatar();
+  }
   if (state.vaultCorrupted) {
     unlockPrimaryBtn.textContent = "无法解锁";
     authHelper.textContent = "本地保险箱文件可能损坏，请从备份文件恢复。";
@@ -3146,6 +3321,10 @@ async function initAuthState() {
 function shouldShowEmptyFolders(query) {
   return !query && !state.activeTagFilter && !state.activePriorityFilter && state.activeFilter === "全部";
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Rendering (entries, forms, read view)
+// ════════════════════════════════════════════════════════════════════
 
 function createEntryNode(entry) {
   const priority = normalizePriority(entry.priority);
@@ -3574,6 +3753,10 @@ async function upsertEntry() {
   const site = siteInput.value.trim();
   if (!site) {
     showToast("先填写名称");
+// ════════════════════════════════════════════════════════════════════
+// Entry CRUD & Vault Persistence
+// ════════════════════════════════════════════════════════════════════
+
     siteInput.focus();
     return;
   }
@@ -4052,6 +4235,10 @@ deleteEntryBtn.addEventListener("click", () => {
   if (!state.activeId) return showToast("当前没有可删除的记录");
   const entry = getActiveEntry();
   const deleteMessage = "再次点击删除「" + (entry?.site || "当前记录") + "」";
+// ════════════════════════════════════════════════════════════════════
+// Event Listeners
+// ════════════════════════════════════════════════════════════════════
+
   confirmWithin("delete-" + state.activeId, deleteMessage, async () => {
     const now = new Date().toISOString();
     state.entries = state.entries.map((item) =>
@@ -4451,6 +4638,102 @@ window.addEventListener("click", (event) => {
   hideSidebarContextMenu();
 });
 
+// ════════════════════════════════════════════════════════════════════
+/* --- Avatar Event Listeners --- */
+
+uploadAvatarBtn?.addEventListener("click", () => {
+  avatarFileInput?.click();
+});
+
+avatarFileInput?.addEventListener("change", (event) => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    showToast("请选择图片文件");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    openAvatarCropModal(reader.result);
+  };
+  reader.readAsDataURL(file);
+  avatarFileInput.value = "";
+});
+
+removeAvatarBtn?.addEventListener("click", async () => {
+  state.settings = normalizeSettings({ ...state.settings, avatar: "" });
+  syncAvatarSettings();
+  applyLoginAvatar();
+  touchActivity();
+  await window.vault?.removeAvatar?.();
+  await persistVault();
+  showToast("头像已移除");
+});
+
+closeAvatarCropBtn?.addEventListener("click", closeAvatarCropModal);
+cancelAvatarCropBtn?.addEventListener("click", closeAvatarCropModal);
+avatarCropModal?.addEventListener("click", (event) => {
+  if (event.target === avatarCropModal) closeAvatarCropModal();
+});
+
+confirmAvatarCropBtn?.addEventListener("click", async () => {
+  const avatarData = getCroppedAvatarData();
+  state.settings = normalizeSettings({ ...state.settings, avatar: avatarData });
+  syncAvatarSettings();
+  applyLoginAvatar();
+  closeAvatarCropModal();
+  touchActivity();
+  await window.vault?.saveAvatar?.(avatarData);
+  await persistVault();
+  showToast("头像已应用");
+});
+
+/* --- Crop drag & zoom --- */
+
+avatarCropCanvas?.addEventListener("mousedown", (event) => {
+  cropState.dragging = true;
+  cropState.dragStartX = event.clientX - cropState.offsetX;
+  cropState.dragStartY = event.clientY - cropState.offsetY;
+});
+
+avatarCropCanvas?.addEventListener("mousemove", (event) => {
+  if (!cropState.dragging) return;
+  cropState.offsetX = event.clientX - cropState.dragStartX;
+  cropState.offsetY = event.clientY - cropState.dragStartY;
+  drawCropCanvas();
+});
+
+avatarCropCanvas?.addEventListener("mouseup", () => { cropState.dragging = false; });
+avatarCropCanvas?.addEventListener("mouseleave", () => { cropState.dragging = false; });
+
+avatarCropCanvas?.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const delta = event.deltaY > 0 ? -0.05 : 0.05;
+  cropState.scale = Math.max(0.3, Math.min(3, cropState.scale + delta));
+  drawCropCanvas();
+}, { passive: false });
+
+avatarCropCanvas?.addEventListener("touchstart", (event) => {
+  if (event.touches.length === 1) {
+    cropState.dragging = true;
+    cropState.dragStartX = event.touches[0].clientX - cropState.offsetX;
+    cropState.dragStartY = event.touches[0].clientY - cropState.offsetY;
+  }
+}, { passive: true });
+
+avatarCropCanvas?.addEventListener("touchmove", (event) => {
+  if (!cropState.dragging || event.touches.length !== 1) return;
+  event.preventDefault();
+  cropState.offsetX = event.touches[0].clientX - cropState.dragStartX;
+  cropState.offsetY = event.touches[0].clientY - cropState.dragStartY;
+  drawCropCanvas();
+}, { passive: false });
+
+avatarCropCanvas?.addEventListener("touchend", () => { cropState.dragging = false; });
+
+// App Initialization & IPC Listeners
+// ════════════════════════════════════════════════════════════════════
+
 function showMainVault(payload) {
   if (!payload?.masterPassword) {
     return;
@@ -4471,6 +4754,7 @@ function showMainVault(payload) {
   }
   syncPrimaryActionButton();
   syncDetailSurface();
+  applyLoginAvatar();
   queueMicrotask(() => {
     autoCheckForAppUpdatesAfterUnlock();
   });
@@ -4492,7 +4776,7 @@ window.vault?.onVaultUpdated?.((payload) => {
   }
 });
 
-window.vault?.onClearAuth?.(() => {
+window.vault?.onClearAuth?.(async () => {
   clearCloudSyncTimer();
   closeChangePasswordModal();
   closeUpdateReminder();
@@ -4500,6 +4784,11 @@ window.vault?.onClearAuth?.(() => {
   refreshRecoveryStatus();
   refreshDataKeyStatus();
   state.updateAutoChecked = false;
+  const avatarResult = await window.vault?.getAvatar?.();
+  if (avatarResult && avatarResult.avatar !== undefined) {
+    state.settings = normalizeSettings({ ...state.settings, avatar: avatarResult.avatar });
+  }
+  applyLoginAvatar();
 });
 
 window.vault?.onUpdateDownloadProgress?.((progress) => {
@@ -4553,6 +4842,7 @@ window.vault?.onStatus?.((status) => {
   refreshStatusText();
   refreshRecoveryStatus();
   syncDetailSurface();
+  applyLoginAvatar();
 });
 
 queueMicrotask(() => {
@@ -4560,5 +4850,6 @@ queueMicrotask(() => {
   initAuthState();
   loadUpdateReminderFromFile();
   syncDetailSurface();
+  applyLoginAvatar();
 });
 
