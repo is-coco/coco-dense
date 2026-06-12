@@ -1,0 +1,43 @@
+# Flutter
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.pub/
+*.iml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+*.DS_Store
+**/*.g.dart
+*.freezed.dart
+
+# Android build
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# iOS build
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/app.flx
+ios/Flutter/engine/
+ios/Runner/GeneratedPluginRegistrant.*
+
+# Old Electron code
+coco-dense-master/
+coco-dense-master.zip
+
+# Misc
+*.log
+*.bak
+tmp/

@@ -1,0 +1,25 @@
+name: coco_account
+description: "Coco Dense - Local encrypted password manager"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  encrypt: ^5.0.3
+  pointycastle: ^3.9.1
+  http: ^1.2.2
+  path_provider: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
