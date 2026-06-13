@@ -10,12 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/is-coco/coco-dense/releases"><img src="https://img.shields.io/github/v/release/is-coco/coco-dense?label=下载" alt="Release"></a>
-  <img src="https://img.shields.io/badge/平台-macOS%20%7C%20Windows%20%7C%20Android-blue" alt="Platform">
-  <img src="https://img.shields.io/badge/加密-AES--256--GCM-green" alt="Encryption">
+  <img src="https://img.shields.io/badge/平台-macOS%20%7C%20Windows%20%7C%20Android-blue?style=flat-square" alt="Platform" />
+  <img src="https://img.shields.io/badge/加密-AES--256--GCM-green?style=flat-square" alt="Encryption" />
 </p>
-
----
 
 ---
 
