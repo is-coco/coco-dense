@@ -1,8 +1,10 @@
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/is-coco/coco-dense@master/assets/app-icon.png" width="120">
+</p>
+
 # Coco Dense
 
 <div align="center">
-
-<img src="https://github.com/is-coco/coco-dense/blob/master/assets/app-icon.png?raw=true" width="120" height="120" alt="Coco Dense">
 
 **本地优先的跨平台密码管理器**
 
