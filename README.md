@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/app-icon.png" width="180" style="border-radius: 32px;">
+  <img src="./assets/app-icon.png" width="96" style="border-radius: 20px;">
 </p>
 
 # Coco Dense
