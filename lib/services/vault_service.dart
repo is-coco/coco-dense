@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import '../crypto/vault_crypto.dart';
+import 'sync_service.dart';
 import '../models/vault_entry.dart';
 
 class UnlockResult {
@@ -215,9 +216,10 @@ class VaultService {
     try {
       final path = await _vaultPath;
       final wrapped = await _encryptCurrent();
-      // 清理内部字段
       wrapped.remove('_vaultKeyB64');
       File(path).writeAsStringSync(jsonEncode(wrapped));
+      // 自动同步到云端
+      SyncService.instance.autoSync(wrapped);
     } finally {
       _saving = false;
     }

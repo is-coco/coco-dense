@@ -118,18 +118,74 @@ class AppRoot extends StatefulWidget {
   State<AppRoot> createState() => _AppRootState();
 }
 
-class _AppRootState extends State<AppRoot> {
+class _AppRootState extends State<AppRoot> with WidgetsBindingObserver {
   bool _init = false, _hasVault = false;
+  DateTime? _lastActivity;
+
   @override
-  void initState() { super.initState(); _check(); }
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _check();
+    _startAutoLockTimer();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      // 进入后台时记录时间
+      _lastActivity = DateTime.now();
+    }
+    if (state == AppLifecycleState.resumed) {
+      // 回来时检查是否超时
+      _checkAutoLock();
+    }
+  }
+
+  void _startAutoLockTimer() {
+    // 每30秒检查一次
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 30));
+      if (!mounted) return false;
+      _checkAutoLock();
+      return true;
+    });
+  }
+
+  void _checkAutoLock() {
+    if (!VaultService.instance.isUnlocked) return;
+    final last = _lastActivity;
+    if (last == null) return;
+    final elapsed = DateTime.now().difference(last);
+    // 5分钟无活动自动锁定
+    if (elapsed.inMinutes >= 5) {
+      VaultService.instance.lock();
+      setState(() {});
+    }
+  }
+
   Future<void> _check() async {
     final h = await VaultService.instance.hasVaultFile();
     if (mounted) setState(() { _hasVault = h; _init = true; });
   }
+
+  void _handleActivity() {
+    _lastActivity = DateTime.now();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_init) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (VaultService.instance.isUnlocked) return VaultScreen(onLocked: () => setState(() {}));
+    if (VaultService.instance.isUnlocked) {
+      _handleActivity();
+      return VaultScreen(onLocked: () => setState(() {}));
+    }
     return AuthScreen(hasVault: _hasVault, onUnlocked: () => setState(() {}));
   }
 }
