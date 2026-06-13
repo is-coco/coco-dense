@@ -12,6 +12,10 @@
 <p align="center">
   <img src="https://img.shields.io/badge/平台-macOS%20%7C%20Windows%20%7C%20Android-blue?style=flat-square" alt="Platform" />
   <img src="https://img.shields.io/badge/加密-AES--256--GCM-green?style=flat-square" alt="Encryption" />
+  <img src="https://img.shields.io/badge/存储-本地优先-orange?style=flat-square" alt="Local First" />
+  <img src="https://img.shields.io/badge/同步-WebDAV-purple?style=flat-square" alt="WebDAV" />
+  <img src="https://img.shields.io/badge/语言-Dart%20%26%20JavaScript-cyan?style=flat-square" alt="Language" />
+  <img src="https://img.shields.io/badge/开源-免费-red?style=flat-square" alt="Free" />
 </p>
 
 ---
