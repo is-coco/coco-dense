@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="assets/app-icon.png" width="120" height="120" alt="Coco Dense Icon" style="border-radius: 24px; margin-bottom: 16px;">
+
 **本地优先的跨平台密码管理器**
 
 AES-256-GCM 加密 · WebDAV 云同步 · 数据钥匙 · 生物识别
