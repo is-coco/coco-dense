@@ -1,19 +1,21 @@
 <p align="center">
-  <img src="./assets/app-icon.png" width="96" style="border-radius: 20px;">
+  <img src="./assets/app-icon.png" alt="Coco Dense" width="80" />
 </p>
 
-# Coco Dense
+<h1 align="center">Coco Dense</h1>
 
-<div align="center">
+<p align="center">
+  <strong>本地优先的跨平台密码管理器</strong><br/>
+  AES-256-GCM 加密 · WebDAV 云同步 · 数据钥匙 · 生物识别
+</p>
 
-**本地优先的跨平台密码管理器**
+<p align="center">
+  <a href="https://github.com/is-coco/coco-dense/releases"><img src="https://img.shields.io/github/v/release/is-coco/coco-dense?label=下载" alt="Release"></a>
+  <img src="https://img.shields.io/badge/平台-macOS%20%7C%20Windows%20%7C%20Android-blue" alt="Platform">
+  <img src="https://img.shields.io/badge/加密-AES--256--GCM-green" alt="Encryption">
+</p>
 
-AES-256-GCM 加密 · WebDAV 云同步 · 数据钥匙 · 生物识别
-
-[![Release](https://img.shields.io/github/v/release/is-coco/coco-dense?label=最新版本)](https://github.com/is-coco/coco-dense/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Windows%20|%20Android-blue)]()
-
-</div>
+---
 
 ---
 
