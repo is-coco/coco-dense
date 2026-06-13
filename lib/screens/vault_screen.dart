@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/vault_entry.dart';
 import '../services/vault_service.dart';
 import '../services/sync_service.dart';
@@ -24,14 +25,17 @@ class _VaultScreenState extends State<VaultScreen> {
   @override
   void initState() {
     super.initState();
-    // 启动定时同步
-    SyncService.instance.startPeriodicSync();
+    // 加载保存的同步配置
+    SyncService.instance.loadConfig().then((_) {
+      // 启动定时同步
+      SyncService.instance.startPeriodicSync();
+      // 解锁后自动拉取同步
+      _autoPull();
+    });
     // 定时刷新同步状态
     _syncStatusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) setState(() {});
     });
-    // 解锁后自动拉取同步
-    _autoPull();
   }
 
   Future<void> _autoPull() async {
@@ -110,7 +114,7 @@ class _VaultScreenState extends State<VaultScreen> {
         _searchBar(line, text),
         if (_filterTag.isNotEmpty || _filterPriority.isNotEmpty) _activeFilters(accent),
         const Divider(height: 1, color: line),
-        Expanded(child: entries.isEmpty ? _empty(muted) : _list(entries)),
+        Expanded(child: (entries.isEmpty && VaultService.instance.folders.isEmpty) ? _empty(muted) : _list(entries)),
       ])),
     );
   }
@@ -258,40 +262,79 @@ class _VaultScreenState extends State<VaultScreen> {
       if (folders.isNotEmpty) items.add(_Item.header('未分组'));
       items.addAll(ungrouped.map((e) => _Item.entry(e)));
     }
-    return ListView.builder(padding: const EdgeInsets.only(bottom: 60), itemCount: items.length,
-      itemBuilder: (ctx, i) { final item = items[i];
-        if (item.isFolder) return _folderTile(item.folder!, item.count, item.collapsed);
-        if (item.isHeader) return Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-          child: Text(item.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF6E6E73))));
-        return _entryTile(item.entry!);
-      });
+    return DragTarget<VaultEntry>(
+      onWillAcceptWithDetails: (details) => true,
+      onAcceptWithDetails: (details) {
+        final entry = details.data;
+        if (entry.folderId.isNotEmpty) {
+          VaultService.instance.moveEntryToFolder(entry.id, '');
+          _invalidate();
+          HapticFeedback.lightImpact();
+        }
+      },
+      builder: (context, candidateData, rejectedData) {
+        return Container(
+          color: candidateData.isNotEmpty ? const Color(0xFFFF3B30).withOpacity(0.05) : Colors.transparent,
+          child: ListView.builder(padding: const EdgeInsets.only(bottom: 60), itemCount: items.length,
+            itemBuilder: (ctx, i) { final item = items[i];
+              if (item.isFolder) return _folderTile(item.folder!, item.count, item.collapsed);
+              if (item.isHeader) return Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                child: Text(item.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF6E6E73))));
+              return _entryTile(item.entry!);
+            }),
+        );
+      },
+    );
   }
 
   Widget _folderTile(Folder f, int count, bool collapsed) {
-    return InkWell(
-      onTap: () => setState(() { collapsed ? _collapsed.remove(f.id) : _collapsed.add(f.id); }),
-      onLongPress: () => _showFolderActions(f),
-      child: Padding(padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Row(children: [
-          AnimatedRotation(turns: collapsed ? -0.25 : 0, duration: const Duration(milliseconds: 200),
-            child: Icon(Icons.expand_more, size: 18, color: const Color(0xFF6E6E73).withOpacity(0.6))),
-          const SizedBox(width: 4),
-          Icon(collapsed ? Icons.folder_outlined : Icons.folder_open_outlined, size: 16, color: const Color(0xFF007AFF).withOpacity(0.6)),
-          const SizedBox(width: 6),
-          Expanded(child: Row(children: [
-            Text(f.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1D1D1F))),
-            if (f.priority != 'green' && f.priority.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              Container(width: 6, height: 6, decoration: BoxDecoration(
-                color: f.priority == 'red' ? const Color(0xFFFF3B30) : const Color(0xFFFFB800),
-                borderRadius: BorderRadius.circular(3))),
-            ],
-          ])),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(color: const Color(0x0D007AFF), borderRadius: BorderRadius.circular(10)),
-            child: Text('$count', style: const TextStyle(fontSize: 11, color: Color(0xFF6E6E73)))),
-        ])));
+    return DragTarget<VaultEntry>(
+      onWillAcceptWithDetails: (details) => true,
+      onAcceptWithDetails: (details) {
+        final entry = details.data;
+        VaultService.instance.moveEntryToFolder(entry.id, f.id);
+        _invalidate();
+        HapticFeedback.lightImpact();
+      },
+      builder: (context, candidateData, rejectedData) {
+        final isHovering = candidateData.isNotEmpty;
+        return Container(
+          decoration: BoxDecoration(
+            color: isHovering ? const Color(0xFF007AFF).withOpacity(0.08) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: isHovering ? Border.all(color: const Color(0xFF007AFF).withOpacity(0.3)) : null,
+          ),
+          child: InkWell(
+            onTap: () => setState(() { collapsed ? _collapsed.remove(f.id) : _collapsed.add(f.id); }),
+            onLongPress: () => _showFolderActions(f),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(children: [
+                AnimatedRotation(turns: collapsed ? -0.25 : 0, duration: const Duration(milliseconds: 200),
+                  child: Icon(Icons.expand_more, size: 18, color: const Color(0xFF6E6E73).withOpacity(0.6))),
+                const SizedBox(width: 4),
+                Icon(collapsed ? Icons.folder_outlined : Icons.folder_open_outlined, size: 16, color: const Color(0xFF007AFF).withOpacity(0.6)),
+                const SizedBox(width: 6),
+                Expanded(child: Row(children: [
+                  Text(f.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1D1D1F))),
+                  if (f.priority != 'green' && f.priority.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Container(width: 6, height: 6, decoration: BoxDecoration(
+                      color: f.priority == 'red' ? const Color(0xFFFF3B30) : const Color(0xFFFFB800),
+                      borderRadius: BorderRadius.circular(3))),
+                  ],
+                ])),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: const Color(0x0D007AFF), borderRadius: BorderRadius.circular(10)),
+                  child: Text('\$count', style: const TextStyle(fontSize: 11, color: Color(0xFF6E6E73)))),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
   }
+
 
   void _showFolderActions(Folder f) {
     showModalBottomSheet(context: context, backgroundColor: Colors.transparent, builder: (ctx) => Container(
@@ -383,31 +426,81 @@ class _VaultScreenState extends State<VaultScreen> {
   Widget _entryTile(VaultEntry e) {
     final initial = e.site.isNotEmpty ? e.site[0].toUpperCase() : '?';
     final pColor = e.priority == 'red' ? const Color(0xFFFF3B30) : e.priority == 'yellow' ? const Color(0xFFFFB800) : const Color(0xFF34C759);
-    return InkWell(onTap: () => _open(e), onLongPress: () => _showEntryActions(e),
-      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-          Container(width: 34, height: 34, decoration: BoxDecoration(color: const Color(0xFF007AFF).withOpacity(0.1), borderRadius: BorderRadius.circular(9)),
-            child: Center(child: Text(initial, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF007AFF))))),
+    return LongPressDraggable<VaultEntry>(
+      data: e,
+      delay: const Duration(milliseconds: 300),
+      feedback: Material(
+        elevation: 8,
+        shadowColor: const Color(0xFF007AFF).withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: 180,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(children: [
+            Container(width: 26, height: 26,
+              decoration: BoxDecoration(color: const Color(0xFF007AFF), borderRadius: BorderRadius.circular(6)),
+              child: Center(child: Text(initial, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white)))),
+            const SizedBox(width: 8),
+            Expanded(child: Text(e.site.isEmpty ? '未命名' : e.site, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1D1D1F)))),
+          ]),
+        ),
+      ),
+      childWhenDragging: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF007AFF).withOpacity(0.04),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF007AFF).withOpacity(0.15), width: 1),
+        ),
+        child: Row(children: [
+          Container(width: 34, height: 34,
+            decoration: BoxDecoration(color: const Color(0xFF007AFF).withOpacity(0.06), borderRadius: BorderRadius.circular(9)),
+            child: Center(child: Text(initial, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF007AFF).withOpacity(0.4))))),
           const SizedBox(width: 10),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              if (e.pinned) const Padding(padding: EdgeInsets.only(right: 3), child: Icon(Icons.push_pin, size: 11, color: Color(0xFF007AFF))),
-              if (e.favorite) const Padding(padding: EdgeInsets.only(right: 3), child: Icon(Icons.star, size: 11, color: Color(0xFFFFB800))),
-              Expanded(child: Text(e.site.isEmpty ? '未命名' : e.site, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF1D1D1F)))),
-            ]),
-            Text(e.account, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Color(0xFF6E6E73))),
-            if (e.tags.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2),
-              child: Text(e.tags, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10, color: const Color(0xFF007AFF).withOpacity(0.5)))),
-          ])),
-          if (e.priority != 'green' && e.priority.isNotEmpty)
-            Container(width: 6, height: 6, margin: const EdgeInsets.only(left: 6),
-              decoration: BoxDecoration(color: pColor, borderRadius: BorderRadius.circular(3))),
-          const SizedBox(width: 4),
-          const Icon(Icons.chevron_right, size: 16, color: Color(0xFFA1A1A6)),
-        ])));
+          Expanded(child: Text(e.site.isEmpty ? '未命名' : e.site,
+            style: TextStyle(fontSize: 14, color: const Color(0xFF1D1D1F).withOpacity(0.3)))),
+        ]),
+      ),
+      child: InkWell(
+        onTap: () => _open(e),
+        onLongPress: () => _showEntryActions(e),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Container(width: 34, height: 34,
+              decoration: BoxDecoration(color: const Color(0xFF007AFF).withOpacity(0.1), borderRadius: BorderRadius.circular(9)),
+              child: Center(child: Text(initial, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF007AFF))))),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                if (e.pinned) const Padding(padding: EdgeInsets.only(right: 3), child: Icon(Icons.push_pin, size: 11, color: Color(0xFF007AFF))),
+                if (e.favorite) const Padding(padding: EdgeInsets.only(right: 3), child: Icon(Icons.star, size: 11, color: Color(0xFFFFB800))),
+                Expanded(child: Text(e.site.isEmpty ? '未命名' : e.site, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF1D1D1F)))),
+              ]),
+              Text(e.account, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: Color(0xFF6E6E73))),
+              if (e.tags.isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(e.tags, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10, color: const Color(0xFF007AFF).withOpacity(0.5)))),
+            ])),
+            if (e.priority != 'green' && e.priority.isNotEmpty)
+              Container(width: 6, height: 6, margin: const EdgeInsets.only(left: 6),
+                decoration: BoxDecoration(color: pColor, borderRadius: BorderRadius.circular(3))),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right, size: 16, color: Color(0xFFA1A1A6)),
+          ]),
+        ),
+      ),
+    );
   }
+
 
   void _showEntryActions(VaultEntry e) {
     showModalBottomSheet(context: context, backgroundColor: Colors.transparent, builder: (ctx) => Container(

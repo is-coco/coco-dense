@@ -24,8 +24,18 @@ class _AuthScreenState extends State<AuthScreen> {
   void initState() { super.initState(); _checkDk(); _checkBiometric(); }
 
   Future<void> _checkDk() async {
-    if (widget.hasVault && await VaultService.instance.requiresDataKey()) {
-      if (mounted) setState(() => _needDk = true);
+    if (widget.hasVault) {
+      final needsDk = await VaultService.instance.requiresDataKey();
+      final remembered = await VaultService.instance.loadRememberedDataKey();
+      if (mounted) {
+        setState(() {
+          _needDk = needsDk;
+          // 如果有记住的数据钥匙，自动填充
+          if (remembered != null && remembered.isNotEmpty) {
+            _dkCtl.text = remembered;
+          }
+        });
+      }
     }
   }
 

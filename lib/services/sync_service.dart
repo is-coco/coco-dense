@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -20,6 +22,18 @@ class SyncConfig {
   final String serverUrl, username, appPassword, remotePath;
   SyncConfig({this.serverUrl = '', this.username = '', this.appPassword = '', this.remotePath = '/CocoDense/vault.json'});
   bool get isConfigured => serverUrl.isNotEmpty && username.isNotEmpty && appPassword.isNotEmpty;
+
+  Map<String, dynamic> toJson() => {
+    'serverUrl': serverUrl, 'username': username,
+    'appPassword': appPassword, 'remotePath': remotePath,
+  };
+
+  factory SyncConfig.fromJson(Map<String, dynamic> json) => SyncConfig(
+    serverUrl: json['serverUrl'] ?? '',
+    username: json['username'] ?? '',
+    appPassword: json['appPassword'] ?? '',
+    remotePath: json['remotePath'] ?? '/CocoDense/vault.json',
+  );
 }
 
 // isolate 函数
@@ -44,7 +58,29 @@ class SyncService {
   Function(Map<String, dynamic>)? onVaultDownloaded;
   Function()? onVaultUploaded;
 
-  void configure(SyncConfig c) { _config = c; }
+  void configure(SyncConfig c) {
+    _config = c;
+    _persistConfig();
+  }
+
+  Future<void> _persistConfig() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('\${dir.path}/sync-config.json');
+      await file.writeAsString(jsonEncode(_config.toJson()));
+    } catch (_) {}
+  }
+
+  Future<void> loadConfig() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('\${dir.path}/sync-config.json');
+      if (file.existsSync()) {
+        final raw = jsonDecode(file.readAsStringSync());
+        _config = SyncConfig.fromJson(Map<String, dynamic>.from(raw));
+      }
+    } catch (_) {}
+  }
   void setAutoSync(bool enabled) { _autoSyncEnabled = enabled; }
 
   // 启动定时同步（默认每5分钟）

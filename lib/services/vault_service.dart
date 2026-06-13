@@ -178,11 +178,19 @@ class VaultService {
     final file = File(path);
     if (!file.existsSync()) { _createNew(password, dataKey); return const UnlockResult.success(); }
     try {
+      // 如果没有传入数据钥匙，尝试从磁盘加载记住的钥匙
+      String effectiveDataKey = dataKey;
+      if (effectiveDataKey.isEmpty) {
+        final remembered = await loadRememberedDataKey();
+        if (remembered != null && remembered.isNotEmpty) {
+          effectiveDataKey = remembered;
+        }
+      }
       final raw = file.readAsStringSync();
-      final result = await compute(_decryptIsolate, {'password': password, 'vault': jsonDecode(raw), 'dataKey': dataKey});
+      final result = await compute(_decryptIsolate, {'password': password, 'vault': jsonDecode(raw), 'dataKey': effectiveDataKey});
       _loadPayload(result);
       _masterPassword = password;
-      _dataKey = dataKey;
+      _dataKey = effectiveDataKey;
       _unlocked = true;
       // 缓存 vaultKey，后续保存不再跑 PBKDF2
       if (result['vaultKeyB64'] != null) {

@@ -29,11 +29,36 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   final _oldPwd = TextEditingController(), _newPwd = TextEditingController(), _confPwd = TextEditingController();
 
   @override
-  void initState() { super.initState(); _tab = TabController(length: 5, vsync: this); _load(); }
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 5, vsync: this);
+    _load();
+    // 等待同步配置加载完成后更新 controllers
+    SyncService.instance.loadConfig().then((_) {
+      if (mounted) {
+        setState(() {
+          _serverCtl.text = SyncService.instance.config.serverUrl;
+          _userCtl.text = SyncService.instance.config.username;
+          _passCtl.text = SyncService.instance.config.appPassword;
+          _pathCtl.text = SyncService.instance.config.remotePath;
+        });
+      }
+    });
+  }
   Future<void> _load() async {
     final dk = await VaultService.instance.getDataKeyStatus();
     final rc = await VaultService.instance.getRecoveryStatus();
-    if (mounted) setState(() { _dkActive = dk['sessionActive'] ?? false; _recOk = rc['configured'] ?? false; });
+    // 加载记住的数据钥匙
+    final rememberedKey = await VaultService.instance.loadRememberedDataKey();
+    if (mounted) setState(() {
+      _dkActive = dk['sessionActive'] ?? false;
+      _recOk = rc['configured'] ?? false;
+      _dkRemember = dk['remembered'] ?? false;
+      if (rememberedKey != null && rememberedKey.isNotEmpty) {
+        _dkCtl.text = rememberedKey;
+        _dkRemember = true;
+      }
+    });
   }
   @override
   void dispose() {
@@ -95,11 +120,12 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         Text('本机记住', style: TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.6)))]),
       const SizedBox(height: 10),
       Row(children: [
-        Expanded(child: OutlinedButton(onPressed: () async { await VaultService.instance.clearDataKey(); setState(() { _dkActive = false; _dkCtl.clear(); }); }, child: const Text('清除', style: TextStyle(fontSize: 13)))),
+        Expanded(child: OutlinedButton(onPressed: () async { await VaultService.instance.clearDataKey(); setState(() { _dkActive = false; _dkCtl.clear(); _dkRemember = false; }); }, child: const Text('清除', style: TextStyle(fontSize: 13)))),
         const SizedBox(width: 8),
         Expanded(child: FilledButton(onPressed: () async {
           if (_dkCtl.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入'))); return; }
-          await VaultService.instance.saveDataKey(_dkCtl.text.trim(), remember: _dkRemember); setState(() => _dkActive = true);
+          await VaultService.instance.saveDataKey(_dkCtl.text.trim(), remember: _dkRemember);
+          setState(() => _dkActive = true);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已保存')));
         }, child: const Text('保存', style: TextStyle(fontSize: 13)))),
       ]),
@@ -259,18 +285,28 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   Future<void> _download() async {
     setState(() => _downloading = true);
     try {
-      final p = await SyncService.instance.downloadVault(VaultService.instance.masterPassword ?? '', dataKey: VaultService.instance.dataKey ?? '').timeout(const Duration(seconds: 60));
+      // 确保使用正确的密码和数据钥匙
+      final masterPwd = VaultService.instance.masterPassword ?? '';
+      final dk = VaultService.instance.dataKey ?? '';
+      final p = await SyncService.instance.downloadVault(masterPwd, dataKey: dk).timeout(const Duration(seconds: 60));
       if (mounted) {
         setState(() => _downloading = false);
         if (p != null) {
           VaultService.instance.applyDownloadedVault(p);
+          // 返回主页面触发刷新
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已下载并应用')));
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('下载失败')));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('下载失败，请检查密码和数据钥匙')));
         }
       }
     } catch (e) {
-      if (mounted) { setState(() => _downloading = false); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('下载超时: $e'))); }
+      if (mounted) {
+        setState(() => _downloading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('下载失败: \${e.toString().contains("数据钥匙") ? "数据钥匙错误" : e.toString().contains("密码") ? "密码错误" : "网络超时"}')));
+      }
     }
   }
 
