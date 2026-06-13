@@ -10,12 +10,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/平台-macOS%20%7C%20Windows%20%7C%20Android-blue?style=for-the-badge" alt="Platform" />
-  <img src="https://img.shields.io/badge/加密-AES--256--GCM-green?style=for-the-badge" alt="Encryption" />
-  <img src="https://img.shields.io/badge/存储-本地优先-orange?style=for-the-badge" alt="Local First" />
-  <img src="https://img.shields.io/badge/同步-WebDAV-purple?style=for-the-badge" alt="WebDAV" />
-  <img src="https://img.shields.io/badge/语言-Dart%20%26%20JavaScript-cyan?style=for-the-badge" alt="Language" />
-  <img src="https://img.shields.io/badge/开源-免费-red?style=for-the-badge" alt="Free" />
+  <img src="https://img.shields.io/badge/v0.4.9-blue?style=flat-square&logo=github" alt="Version" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Android-blueviolet?style=flat-square" alt="Platform" />
+  <img src="https://img.shields.io/badge/encryption-AES--256--GCM-2ea44f?style=flat-square&logo=letsencrypt" alt="Encryption" />
+  <img src="https://img.shields.io/badge/dart-3.12-0175C2?style=flat-square&logo=dart" alt="Dart" />
+  <img src="https://img.shields.io/badge/flutter-3.44-02569B?style=flat-square&logo=flutter" alt="Flutter" />
 </p>
 
 ---
