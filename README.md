@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/is-coco/coco-dense/refs/heads/master/assets/app-icon.png" width="120">
+  <img src="https://cdn.jsdelivr.net/gh/is-coco/coco-dense@master/assets/app-icon.png" width="120">
 </p>
 
 # Coco Dense
