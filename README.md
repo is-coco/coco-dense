@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Coco Dense](https://raw.githubusercontent.com/is-coco/coco-dense/master/assets/app-icon.png)
+<img src="https://github.com/is-coco/coco-dense/blob/master/assets/app-icon.png?raw=true" width="120" height="120" alt="Coco Dense">
 
 **本地优先的跨平台密码管理器**
 
