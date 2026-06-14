@@ -17,7 +17,7 @@ class UpdateInfo {
 
 class UpdateService {
   static const String _repoUrl = 'https://api.github.com/repos/is-coco/coco-dense/releases/latest';
-  static const String currentVersion = '0.4.7';
+  static const String currentVersion = '0.5.0';
   static const List<String> _mirrors = ['https://ghfast.top/', 'https://ghproxy.cn/'];
 
   static Future<UpdateInfo> checkUpdate() async {
