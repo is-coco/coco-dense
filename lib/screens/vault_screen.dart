@@ -389,18 +389,23 @@ class _VaultScreenState extends State<VaultScreen> {
 
   void _showCreateFolderDialog() {
     final ctl = TextEditingController();
-    showDialog(context: context, builder: (ctx) => AlertDialog(
+    bool submitted = false;
+    showDialog(context: context, barrierDismissible: true, builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       title: const Text('新建分组', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
       content: TextField(controller: ctl, autofocus: true, style: const TextStyle(fontSize: 14),
         decoration: InputDecoration(hintText: '分组名称',
           filled: true, fillColor: const Color(0x0D007AFF),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
-        onSubmitted: (v) { _submitCreateFolder(v); Navigator.pop(ctx); }),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10))),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-        FilledButton(onPressed: () { _submitCreateFolder(ctl.text); Navigator.pop(ctx); }, child: const Text('创建')),
+        FilledButton(onPressed: () {
+          if (submitted) return;
+          submitted = true;
+          _submitCreateFolder(ctl.text);
+          Navigator.pop(ctx);
+        }, child: const Text('创建')),
       ]));
   }
 
@@ -413,13 +418,19 @@ class _VaultScreenState extends State<VaultScreen> {
 
   void _renameFolder(Folder f) {
     final ctl = TextEditingController(text: f.name);
+    bool submitted = false;
     showDialog(context: context, builder: (ctx) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       title: const Text('重命名'),
       content: TextField(controller: ctl, autofocus: true),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-        TextButton(onPressed: () { if (ctl.text.trim().isNotEmpty) { VaultService.instance.renameFolder(f.id, ctl.text.trim()); _invalidate(); } Navigator.pop(ctx); }, child: const Text('确定')),
+        TextButton(onPressed: () {
+          if (submitted) return;
+          submitted = true;
+          if (ctl.text.trim().isNotEmpty) { VaultService.instance.renameFolder(f.id, ctl.text.trim()); _invalidate(); }
+          Navigator.pop(ctx);
+        }, child: const Text('确定')),
       ]));
   }
 

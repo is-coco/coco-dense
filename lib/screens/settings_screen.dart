@@ -120,11 +120,23 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
         Text('本机记住', style: TextStyle(fontSize: 13, color: cs.onSurface.withOpacity(0.6)))]),
       const SizedBox(height: 10),
       Row(children: [
-        Expanded(child: OutlinedButton(onPressed: () async { await VaultService.instance.clearDataKey(); setState(() { _dkActive = false; _dkCtl.clear(); _dkRemember = false; }); }, child: const Text('清除', style: TextStyle(fontSize: 13)))),
+        Expanded(child: OutlinedButton(onPressed: () async {
+          await VaultService.instance.clearDataKey();
+          if (SyncService.instance.isConfigured) {
+            final wrapped = await VaultService.instance.encryptCurrentVault();
+            SyncService.instance.uploadVault(wrapped);
+          }
+          setState(() { _dkActive = false; _dkCtl.clear(); _dkRemember = false; });
+        }, child: const Text('清除', style: TextStyle(fontSize: 13)))),
         const SizedBox(width: 8),
         Expanded(child: FilledButton(onPressed: () async {
-          if (_dkCtl.text.trim().isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入'))); return; }
-          await VaultService.instance.saveDataKey(_dkCtl.text.trim(), remember: _dkRemember);
+          final key = _dkCtl.text.trim();
+          if (key.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入数据钥匙'))); return; }
+          await VaultService.instance.saveDataKey(key, remember: _dkRemember);
+          if (SyncService.instance.isConfigured) {
+            final wrapped = await VaultService.instance.encryptCurrentVault();
+            SyncService.instance.uploadVault(wrapped);
+          }
           setState(() => _dkActive = true);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已保存')));
         }, child: const Text('保存', style: TextStyle(fontSize: 13)))),

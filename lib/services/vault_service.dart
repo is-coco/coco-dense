@@ -197,6 +197,8 @@ class VaultService {
         _cachedVaultKeyB64 = result['vaultKeyB64'] as String;
         _cachedEncryptedKey = Map<String, dynamic>.from(result['key'] as Map);
       }
+      SyncService.instance.setPasswordProvider(() => _masterPassword ?? '', () => _dataKey ?? '');
+      SyncService.instance.setEncryptCallback(() => _encryptCurrent());
       return const UnlockResult.success();
     } catch (e) {
       final msg = e.toString();
@@ -209,6 +211,8 @@ class VaultService {
   void _createNew(String pwd, String dk) {
     _entries = []; _settings = {}; _masterPassword = pwd; _dataKey = dk; _unlocked = true;
     _cachedVaultKeyB64 = null; _cachedEncryptedKey = null;
+    SyncService.instance.setPasswordProvider(() => _masterPassword ?? '', () => _dataKey ?? '');
+    SyncService.instance.setEncryptCallback(() => _encryptCurrent());
     _saveVault();
   }
 
@@ -257,7 +261,27 @@ class VaultService {
 
   Future<Map<String, dynamic>> encryptCurrentVault() => _encryptCurrent();
 
-  void applyDownloadedVault(Map<String, dynamic> payload) { _loadPayload(payload); _saveVault(); }
+  void applyDownloadedVault(Map<String, dynamic> payload) {
+    final newEntries = (payload['entries'] as List? ?? []).map((e) => VaultEntry.fromJson(Map<String, dynamic>.from(e))).toList();
+    final newSettings = Map<String, dynamic>.from(payload['settings'] ?? {});
+    final merged = <String, VaultEntry>{};
+    for (final e in _entries) { merged[e.id] = e; }
+    for (final e in newEntries) {
+      final existing = merged[e.id];
+      if (existing == null) {
+        merged[e.id] = e;
+      } else {
+        if (e.updatedAt.compareTo(existing.updatedAt) > 0) {
+          merged[e.id] = e;
+        }
+      }
+    }
+    _entries = merged.values.toList();
+    if (newSettings.containsKey('folders')) {
+      _settings['folders'] = newSettings['folders'];
+    }
+    _saveVault();
+  }
 
   void addEntry(VaultEntry e) { _entries.insert(0, e); _saveVault(); }
   void updateEntry(VaultEntry e) { final i = _entries.indexWhere((x) => x.id == e.id); if (i >= 0) { _entries[i] = e; _saveVault(); } }

@@ -57,6 +57,19 @@ class SyncService {
   // 回调：同步完成后通知 vault 重新加载
   Function(Map<String, dynamic>)? onVaultDownloaded;
   Function()? onVaultUploaded;
+  // 回调：获取当前密码（用于定时同步解密）
+  String Function()? _getMasterPassword;
+  String Function()? _getDataKey;
+  Future<Map<String, dynamic>> Function()? _encryptCallback;
+
+  void setPasswordProvider(String Function() getMaster, String Function() getDataKey) {
+    _getMasterPassword = getMaster;
+    _getDataKey = getDataKey;
+  }
+
+  void setEncryptCallback(Future<Map<String, dynamic>> Function() encrypt) {
+    _encryptCallback = encrypt;
+  }
 
   void configure(SyncConfig c) {
     _config = c;
@@ -112,28 +125,32 @@ class SyncService {
     if (!_config.isConfigured || !_autoSyncEnabled) return;
     _status = _status.copyWith(state: SyncState.syncing, message: '检查同步...');
     try {
-      // 1. 下载云端数据
       final remotePayload = await _downloadRaw();
       _status = _status.copyWith(lastCheckAt: DateTime.now());
 
       if (remotePayload == null) {
-        // 云端无数据，上传本地
-        _status = _status.copyWith(state: SyncState.success, message: '云端无数据', lastSyncAt: DateTime.now());
+        final wrapped = await _encryptCallback?.call();
+        if (wrapped != null) await uploadVault(wrapped);
+        _status = _status.copyWith(state: SyncState.success, message: '已上传', lastSyncAt: DateTime.now());
         return;
       }
 
-      // 2. 解密云端数据
+      final masterPwd = _getMasterPassword?.call() ?? '';
+      final dk = _getDataKey?.call() ?? '';
+      if (masterPwd.isEmpty && dk.isEmpty) {
+        _status = _status.copyWith(state: SyncState.warn, message: '需要解锁后同步');
+        return;
+      }
       final remoteDecrypted = await compute(_decryptSync, {
-        'password': onVaultDownloaded != null ? '' : '',
+        'password': masterPwd,
         'vault': remotePayload,
-        'dataKey': '',
+        'dataKey': dk,
       });
 
-      // 3. 通知 vault 下载完成（由调用方决定如何合并）
       onVaultDownloaded?.call(remoteDecrypted);
       _status = _status.copyWith(state: SyncState.success, message: '同步完成', lastSyncAt: DateTime.now());
     } catch (e) {
-      _status = _status.copyWith(state: SyncState.error, message: '同步失败: $e');
+      _status = _status.copyWith(state: SyncState.error, message: '同步失败');
     }
   }
 
