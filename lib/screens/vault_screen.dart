@@ -46,7 +46,7 @@ class _VaultScreenState extends State<VaultScreen> {
     );
     if (payload != null && mounted) {
       VaultService.instance.applyDownloadedVault(payload);
-      setState(() {});
+      _invalidate();
     }
   }
 
@@ -195,7 +195,6 @@ class _VaultScreenState extends State<VaultScreen> {
     await SyncService.instance.uploadVault(wrapped);
     // 再下载合并
     await _autoPull();
-    setState(() {});
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('同步完成')));
   }
 
@@ -247,8 +246,13 @@ class _VaultScreenState extends State<VaultScreen> {
 
   Widget _list(List<VaultEntry> entries) {
     final folders = VaultService.instance.folders;
+    final folderIds = folders.map((f) => f.id).toSet();
     final byFolder = <String, List<VaultEntry>>{};
-    for (final e in entries) { byFolder.putIfAbsent(e.folderId, () => []).add(e); }
+    for (final e in entries) {
+      // 孤立folderId（云端有但本地没有对应文件夹）归入未分组
+      final key = folderIds.contains(e.folderId) ? e.folderId : '';
+      byFolder.putIfAbsent(key, () => []).add(e);
+    }
     final items = <_Item>[];
     for (final f in folders) {
       final fe = byFolder[f.id] ?? [];

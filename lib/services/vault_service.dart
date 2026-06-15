@@ -264,21 +264,28 @@ class VaultService {
   void applyDownloadedVault(Map<String, dynamic> payload) {
     final newEntries = (payload['entries'] as List? ?? []).map((e) => VaultEntry.fromJson(Map<String, dynamic>.from(e))).toList();
     final newSettings = Map<String, dynamic>.from(payload['settings'] ?? {});
+    // 合并条目：以 updatedAt 较新的为准，保留所有条目
     final merged = <String, VaultEntry>{};
     for (final e in _entries) { merged[e.id] = e; }
     for (final e in newEntries) {
       final existing = merged[e.id];
       if (existing == null) {
         merged[e.id] = e;
-      } else {
-        if (e.updatedAt.compareTo(existing.updatedAt) > 0) {
-          merged[e.id] = e;
-        }
+      } else if (e.updatedAt.compareTo(existing.updatedAt) > 0) {
+        merged[e.id] = e;
       }
     }
     _entries = merged.values.toList();
+    // 合并文件夹：保留两边的文件夹，不丢失
     if (newSettings.containsKey('folders')) {
-      _settings['folders'] = newSettings['folders'];
+      final localFolders = folders;
+      final remoteFolders = (newSettings['folders'] as List? ?? []).map((e) => Folder.fromJson(Map<String, dynamic>.from(e))).toList();
+      final allFolders = <String, Folder>{};
+      for (final f in localFolders) { allFolders[f.id] = f; }
+      for (final f in remoteFolders) {
+        if (!allFolders.containsKey(f.id)) { allFolders[f.id] = f; }
+      }
+      _settings['folders'] = allFolders.values.map((f) => f.toJson()).toList();
     }
     _saveVault();
   }
